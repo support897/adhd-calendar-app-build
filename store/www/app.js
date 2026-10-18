@@ -1,0 +1,2079 @@
+/* Calm Calendar app. Self contained: data lives on this device only.
+   The calendar grid shows the whole truth. The list under it is the day,
+   adapted to how you feel. Parked means parked, never dropped. */
+(function () {
+"use strict";
+var L = window.CalmLogic;
+var tr = window.t; /* the language layer (i18n.js) — aliased: too many locals are named t */
+var STORE = "calmcal-v1";
+/* Accounts wave: the document gets an owner. Storage keys are
+   per-identity — "calmcal-v1:guest" signed out, "calmcal-v1:<uid>"
+   per account — so accounts on one device never bleed across. The
+   legacy bare key migrates to the guest key on first boot (the
+   original stays, frozen, as a backup; nothing is ever deleted). */
+var FB = window.PaceFB || { configured: false, session: function () { return null; }, userError: function () { return "Something did not work. Try again."; } };
+var ACTIVE_UID = null;
+try { var sess0 = FB.configured ? FB.session() : null; if (sess0 && sess0.uid) ACTIVE_UID = String(sess0.uid); } catch (e) {}
+function storeKey() { return ACTIVE_UID ? STORE + ":" + ACTIVE_UID : STORE + ":guest"; }
+try { if (!localStorage.getItem(STORE + ":guest") && localStorage.getItem(STORE)) localStorage.setItem(STORE + ":guest", localStorage.getItem(STORE)); } catch (e) {}
+var state = load();
+var selected = L.todayKey();
+var currentView = "dayGridMonth";
+var calendar = null;
+var currentTaskId = null;
+var currentInstanceDate = null;
+var drafts = [];
+
+function uid() { return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+function icon(name) { return '<svg class="ico" aria-hidden="true"><use href="#' + name + '"/></svg>'; }
+function $(id) { return document.getElementById(id); }
+
+function defaultSettings() {
+  return {
+    checkinTime: "08:00",
+    names: { low: "Bad", steady: "Ok", full: "Great" },
+    notif: { perm: "off", checkin: true, start: true, setup: 5, digest: true, digestTimes: ["12:30", "16:30"], done: false, doneTime: "20:00" },
+    pausedDate: null,
+    appearance: { theme: "white", cute: false, photo: null, photoMode: "light", bgChoice: "theme" },
+    sidebarCollapsed: true,
+    profileName: ""
+  };
+}
+function isObj(x) { return !!x && typeof x === "object" && !Array.isArray(x); }
+/* A clock time as HH:MM if it is a real time of day, else null. */
+function validClock(x) {
+  var m = /^(\d{1,2}):(\d{2})$/.exec(String(x == null ? "" : x).trim());
+  if (!m || +m[1] > 23 || +m[2] > 59) return null;
+  return L.pad(+m[1]) + ":" + m[2];
+}
+function load(fromKey) {
+  try {
+    var raw = localStorage.getItem(fromKey || storeKey());
+    if (!raw) return null;
+    var s = JSON.parse(raw);
+    if (!isObj(s)) return null;
+    /* Normalise every field the app leans on. All of a user's data lives in
+       this one key; a wrong-shaped field must recover, never brick the app. */
+    if (!Array.isArray(s.tasks)) s.tasks = [];
+    s.tasks = s.tasks.filter(function (t) { return isObj(t) && typeof t.title === "string"; });
+    s.tasks.forEach(function (t) {
+      if (!t.id) t.id = uid();
+      if (typeof t.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(t.date)) t.date = L.todayKey();
+      if (!Array.isArray(t.skipDates)) t.skipDates = [];
+      if (!Array.isArray(t.doneDates)) t.doneDates = [];
+      if (!Array.isArray(t.steps)) t.steps = [];
+      if (typeof t.durationMin !== "number" || !(t.durationMin > 0)) t.durationMin = 25;
+      if (typeof t.status !== "string") t.status = "todo";
+    });
+    if (!isObj(s.feelings)) s.feelings = {};
+    if (!isObj(s.sent)) s.sent = {};
+    if (typeof s.todos === "string" && s.todos) s.todos = [{ text: s.todos }];
+    if (!Array.isArray(s.todos)) s.todos = [];
+    /* Entry-level heal (QA's named seed, accounts phase): a bare
+       string ENTRY inside todos becomes an item — repaired, never
+       dropped like the field-level string already was. */
+    s.todos = s.todos.map(function (t) { return typeof t === "string" && t ? { text: t } : t; });
+    s.todos = s.todos.filter(function (t) { return isObj(t) && typeof t.text === "string"; });
+    s.todos.forEach(function (t) {
+      if (!t.id) t.id = uid();
+      t.done = !!t.done;
+      if (typeof t.calTaskId !== "string") t.calTaskId = null;
+    });
+    if (!Array.isArray(s.habits)) s.habits = [];
+    s.habits = s.habits.filter(function (h) { return isObj(h) && typeof h.name === "string"; });
+    s.habits.forEach(function (h) {
+      if (!h.id) h.id = uid();
+      if (L.HABIT_ICONS.indexOf(h.icon) === -1) h.icon = "star";
+      if (!isObj(h.days)) h.days = {};
+    });
+    s.settings = Object.assign(defaultSettings(), isObj(s.settings) ? s.settings : {});
+    s.settings.notif = Object.assign(defaultSettings().notif, isObj(s.settings.notif) ? s.settings.notif : {});
+    if (!isObj(s.settings.names)) s.settings.names = defaultSettings().names;
+    ["low", "steady", "full"].forEach(function (k) {
+      if (typeof s.settings.names[k] !== "string" || !s.settings.names[k].trim()) s.settings.names[k] = defaultSettings().names[k];
+    });
+    // The feeling words ruling (15 Oct): the three choices read
+    // Bad · Ok · Great. A profile still carrying the COMPLETE
+    // old factory set (Bad/Ok/Good) never customised them, so
+    // it rides the rename; any customised name is the user's
+    // own and stays exactly as they left it (Law B).
+    if (s.settings.names.low === "Bad" && s.settings.names.steady === "Ok" && s.settings.names.full === "Good") s.settings.names.full = "Great";
+    s.settings.appearance = Object.assign(defaultSettings().appearance, isObj(s.settings.appearance) ? s.settings.appearance : {});
+    /* Law E: the user's own background photo is USER DATA (Law B) —
+       a wrong-shaped value repairs to "no photo", never deletes by
+       surprise beyond its own field. */
+    if (typeof s.settings.appearance.photo !== "string" || s.settings.appearance.photo.indexOf("data:image/") !== 0 || s.settings.appearance.photo.length > 4200000) s.settings.appearance.photo = null;
+    if (s.settings.appearance.photoMode !== "dark") s.settings.appearance.photoMode = "light";
+    if (s.settings.appearance.bgChoice !== "photo" || !s.settings.appearance.photo) s.settings.appearance.bgChoice = "theme";
+    if (typeof s.settings.sidebarCollapsed !== "boolean") s.settings.sidebarCollapsed = !!s.settings.sidebarCollapsed;
+    s.settings.sidebarCollapsed = true; // Sidebar Adaptive Law, final shape: hidden on EVERY load; opening is per-session only.
+    if (typeof s.settings.profileName !== "string") s.settings.profileName = s.settings.profileName == null ? "" : String(s.settings.profileName);
+    if (typeof s.settings.guideDone !== "boolean") s.settings.guideDone = !!s.settings.guideDone;
+    var times = (Array.isArray(s.settings.notif.digestTimes) ? s.settings.notif.digestTimes : []).map(validClock).filter(Boolean);
+    s.settings.notif.digestTimes = times.length ? times : ["12:30"];
+    s.welcomed = !!s.welcomed;
+    s.imports = (Array.isArray(s.imports) ? s.imports : []).filter(function (r) { return r && typeof r === "object" && typeof r.key === "string"; }).map(function (r) { return { key: r.key, source: String(r.source || "calendar"), at: String(r.at || ""), count: Math.max(0, Math.round(+r.count) || 0) }; });
+    return s;
+  } catch (e) {}
+  return null;
+}
+function save() {
+  try {
+    if (state) state.updatedAt = Date.now();
+    localStorage.setItem(storeKey(), JSON.stringify(state));
+  } catch (e) {}
+  try { if (typeof PaceRemind !== "undefined") PaceRemind.sync(); } catch (e) {}
+  scheduleSync();
+}
+
+function seed() {
+  var today = L.todayKey(), tomorrow = L.addDays(today, 1);
+  function mk(title, date, time, dur, extra) {
+    var cat = L.categoryFor(title);
+    return Object.assign({ id: uid(), title: title, date: date, time: time, durationMin: dur, priority: 0, repeat: null, category: cat.id, color: cat.color, essential: false, status: "todo", steps: L.decompose(title, dur, false), minVersion: "", fullVersion: "", source: "sample", originalText: "", skipDates: [], doneDates: [] }, extra || {});
+  }
+  // Empty-Start Law (14 Oct): the store build starts EMPTY for every user.
+  // The store wrapper (Capacitor) is detectable at runtime; the web app
+  // keeps its samples. Existing saved data is never touched either way.
+  var storeBuild = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  var tasks = storeBuild ? [] : [
+    mk("Doctor appointment", today, "10:00", 45, { essential: true, minVersion: "Ring the doctor to rebook" }),
+    mk("Pay the electricity bill", today, null, 15, { essential: true, priority: 3 }),
+    mk("Clean the kitchen", today, "16:00", 30, {}),
+    mk("Reply to one email", today, null, 10, {}),
+    mk("Walk around the block", today, "17:30", 15, {}),
+    mk("Plan the weekend", today, null, 45, {}),
+    mk("Buy groceries for the week", tomorrow, null, 45, {}),
+    mk("Call mum", tomorrow, "17:00", 15, {})
+  ];
+  return { tasks: tasks, feelings: {}, settings: defaultSettings(), welcomed: false, sent: {}, todos: [], habits: [], imports: [] };
+}
+if (!state) { state = ACTIVE_UID ? freshAccountState() : seed(); save(); }
+
+/* ---------- instances (recurrence expansion) ---------- */
+function repeatMatches(task, key) {
+  if (!task.repeat) return key === task.date;
+  if (key < task.date) return false;
+  var d = L.parseKey(key), wd = d.getDay();
+  var r = task.repeat;
+  if (r === "every day") return true;
+  if (r === "every weekday") return wd >= 1 && wd <= 5;
+  if (r === "every weekend") return wd === 0 || wd === 6;
+  if (r === "every week") return wd === L.parseKey(task.date).getDay();
+  var names = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  if (r === "every " + names[wd]) return true;
+  return false;
+}
+function instanceOf(task, key) {
+  var copy = {}; for (var k in task) copy[k] = task[k];
+  copy.date = key;
+  copy.instanceDate = key;
+  if (task.repeat && (task.doneDates || []).indexOf(key) !== -1) copy.status = "done";
+  return copy;
+}
+function tasksOn(key) {
+  var out = [];
+  state.tasks.forEach(function (t) {
+    if ((t.skipDates || []).indexOf(key) !== -1) return;
+    if (repeatMatches(t, key)) out.push(instanceOf(t, key));
+  });
+  return out;
+}
+function instancesInRange(a, b) {
+  var out = [], key = a;
+  while (key <= b) { out = out.concat(tasksOn(key)); key = L.addDays(key, 1); }
+  return out;
+}
+function baseTask(id) { return state.tasks.filter(function (t) { return t.id === id; })[0]; }
+function levelFor(key) { return state.feelings[key] || "steady"; }
+function adaptedFor(key) {
+  return L.adaptDay(tasksOn(key), levelFor(key), tasksOn(L.addDays(key, 1)));
+}
+
+/* ---------- appearance + sidebar ---------- */
+var THEME_COLORS = { white: "#ffffff", dark: "#161618", blush: "#fff8fa", sky: "#f7fbff", mint: "#f6fcf8", lavender: "#faf8ff", brand: "#dce1f6", photolight: "#f3f5fa", photodark: "#141f1b" };
+function applyAppearance() {
+  var a = state.settings.appearance;
+  var root = document.documentElement;
+  var photoOn = a.bgChoice === "photo" && typeof a.photo === "string" && !!a.photo;
+  if (photoOn) {
+    root.setAttribute("data-theme", a.photoMode === "dark" ? "photodark" : "photolight");
+    root.setAttribute("data-photo", a.photoMode);
+    root.style.setProperty("--photo", 'url("' + a.photo + '")');
+  } else {
+    root.setAttribute("data-theme", a.theme || "white");
+    root.removeAttribute("data-photo");
+    root.style.removeProperty("--photo");
+  }
+  if (a.cute) root.setAttribute("data-cute", "1"); else root.removeAttribute("data-cute");
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", THEME_COLORS[root.getAttribute("data-theme")] || "#ffffff");
+  document.querySelectorAll(".swatch[data-theme-set]").forEach(function (b) { b.classList.toggle("is-active", !photoOn && b.getAttribute("data-theme-set") === a.theme); });
+  var pa = $("photoApply");
+  if (pa) {
+    pa.hidden = !a.photo;
+    pa.classList.toggle("is-active", photoOn);
+    var dot = $("photoDot");
+    if (dot && a.photo) { dot.style.backgroundImage = 'url("' + a.photo + '")'; dot.style.backgroundSize = "cover"; dot.style.backgroundPosition = "center"; }
+  }
+  var pr = $("photoRemove"); if (pr) pr.hidden = !a.photo;
+  $("cuteToggle").checked = !!a.cute;
+}
+function applySidebar() {
+  var root = document.documentElement;
+  if (state.settings.sidebarCollapsed) root.setAttribute("data-sb", "collapsed"); else root.removeAttribute("data-sb");
+  $("sbToggle").checked = !state.settings.sidebarCollapsed;
+  // F1 (final sweep): the calendar measures itself at init,
+  // before the sidebar settles — re-size it against the final
+  // layout on every sidebar change, or a fresh phone load
+  // paints the grid at a stale, narrower width forever.
+  if (calendar) calendar.updateSize();
+}
+document.querySelectorAll(".swatch[data-theme-set]").forEach(function (b) {
+  b.addEventListener("click", function () { var t = b.getAttribute("data-theme-set"); state.settings.appearance.theme = t; state.settings.appearance.bgChoice = "theme"; save(); applyAppearance(); if (t !== "white" && t !== "dark") maybePlus("look"); });
+});
+$("cuteToggle").addEventListener("change", function () { state.settings.appearance.cute = $("cuteToggle").checked; save(); applyAppearance(); if ($("cuteToggle").checked) maybePlus("cute"); });
+/* Law E — the user's own photo as the background. The photo is user
+   data: picking another look never deletes it; only Remove does,
+   and Remove carries Undo (Law B2). A soft veil + an ink set chosen
+   from the photo's own brightness keep every word readable (AA). */
+$("bgPhotoBtn").addEventListener("click", function () { $("bgPhotoFile").click(); });
+$("bgPhotoFile").addEventListener("change", function () {
+  var f = $("bgPhotoFile").files && $("bgPhotoFile").files[0];
+  $("bgPhotoFile").value = "";
+  if (!f) return;
+  var url = URL.createObjectURL(f);
+  var img = new Image();
+  img.onload = function () {
+    URL.revokeObjectURL(url);
+    var scale = Math.min(1, 1440 / Math.max(img.width, img.height));
+    var w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
+    var cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    var cx = cv.getContext("2d"); cx.drawImage(img, 0, 0, w, h);
+    var tiny = document.createElement("canvas"); tiny.width = 24; tiny.height = 24;
+    var tx = tiny.getContext("2d"); tx.drawImage(cv, 0, 0, 24, 24);
+    var px = tx.getImageData(0, 0, 24, 24).data, lum = 0;
+    for (var i = 0; i < px.length; i += 4) lum += (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]) / 255;
+    lum /= (px.length / 4);
+    var prev = { photo: state.settings.appearance.photo, photoMode: state.settings.appearance.photoMode, bgChoice: state.settings.appearance.bgChoice };
+    state.settings.appearance.photo = cv.toDataURL("image/jpeg", 0.85);
+    state.settings.appearance.photoMode = lum >= 0.45 ? "light" : "dark";
+    state.settings.appearance.bgChoice = "photo";
+    save();
+    var kept = false;
+    try { kept = (JSON.parse(localStorage.getItem(storeKey())).settings.appearance.photo || "").length > 1000; } catch (e) {}
+    if (!kept) {
+      state.settings.appearance.photo = prev.photo; state.settings.appearance.photoMode = prev.photoMode; state.settings.appearance.bgChoice = prev.bgChoice;
+      save(); applyAppearance();
+      toast(tr("That photo is too big to keep on this device. A smaller one will fit."));
+      return;
+    }
+    applyAppearance();
+    toast(tr("Your photo is the background now. A soft veil keeps the words readable."));
+  };
+  img.onerror = function () { URL.revokeObjectURL(url); toast(tr("That file did not read as a photo. Nothing changed.")); };
+  img.src = url;
+});
+$("photoApply").addEventListener("click", function () {
+  if (!state.settings.appearance.photo) return;
+  state.settings.appearance.bgChoice = "photo"; save(); applyAppearance();
+});
+$("photoRemove").addEventListener("click", function () {
+  var a = state.settings.appearance;
+  var kept = { photo: a.photo, photoMode: a.photoMode };
+  a.photo = null; a.bgChoice = "theme"; save(); applyAppearance();
+  toast(tr("Photo removed."), function () {
+    state.settings.appearance.photo = kept.photo; state.settings.appearance.photoMode = kept.photoMode; state.settings.appearance.bgChoice = "photo";
+    save(); applyAppearance();
+  });
+});
+$("sbCollapse").addEventListener("click", function () { state.settings.sidebarCollapsed = true; save(); applySidebar(); });
+$("sbExpand").addEventListener("click", function () { state.settings.sidebarCollapsed = false; save(); applySidebar(); });
+$("sbToggle").addEventListener("change", function () { state.settings.sidebarCollapsed = !$("sbToggle").checked; save(); applySidebar(); });
+function renderRing() {
+  var score = L.dayScore(adaptedFor(L.todayKey()));
+  var fg = $("ringFg");
+  if (fg) fg.style.strokeDashoffset = String(113 * (1 - score.pct / 100));
+  var pct = $("ringPct");
+  if (pct) pct.textContent = score.pct + "%";
+}
+
+/* ---------- toast ---------- */
+var toastTimer = null;
+function toast(msg, undoFn) {
+  var t = $("toast"); t.innerHTML = ""; t.appendChild(document.createTextNode(msg));
+  clearTimeout(toastTimer);
+  if (typeof undoFn === "function") {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "toast-undo"; b.textContent = tr("Undo");
+    b.addEventListener("click", function () { clearTimeout(toastTimer); t.hidden = true; undoFn(); });
+    t.appendChild(b);
+    t.hidden = false;
+    toastTimer = setTimeout(function () { t.hidden = true; }, 6500);
+  } else {
+    t.hidden = false;
+    toastTimer = setTimeout(function () { t.hidden = true; }, 3400);
+  }
+}
+function restoreAt(arr, item, index) { arr.splice(Math.min(index, arr.length), 0, item); }
+
+/* ---------- ticker ---------- */
+function renderTicker() {
+  var el = $("ticker"); el.innerHTML = "";
+  var start = L.addDays(selected, -15);
+  var names = []; for (var nd = 0; nd < 7; nd++) names.push(new Date(2024, 0, nd).toLocaleDateString(LOCALE, { weekday: "short" }).replace(".", ""));
+  for (var i = 0; i < 31; i++) {
+    (function (key) {
+      var d = L.parseKey(key);
+      var btn = document.createElement("button");
+      btn.className = "tick" + (key === L.todayKey() ? " is-today" : "") + (key === selected ? " is-selected" : "");
+      btn.setAttribute("data-date", key);
+      var dayTasks = tasksOn(key).filter(function (t) { return t.status !== "done"; });
+      var pills = "", seen = {};
+      dayTasks.slice(0, 12).forEach(function (t) { if (!seen[t.color]) { seen[t.color] = 1; pills += '<span class="tick-pill" style="background:' + t.color + '"></span>'; } });
+      btn.innerHTML = '<span class="tick-wd">' + names[d.getDay()] + '</span><span class="tick-num">' + d.getDate() + '</span><span class="tick-pills">' + pills + "</span>";
+      btn.addEventListener("click", function () { selectDate(key, true); });
+      el.appendChild(btn);
+    })(L.addDays(start, i));
+  }
+  var sel = el.querySelector('[data-date="' + selected + '"]');
+  if (sel) el.scrollTo({ left: sel.offsetLeft - el.clientWidth / 2 + 26, behavior: tickerBooted ? "smooth" : "auto" });
+  tickerBooted = true;
+}
+var tickerBooted = false;
+
+var LOCALE = PACE_LANG === "es" ? "es" : "en-AU";
+var FACTORY_NAMES = { low: "Bad", steady: "Ok", full: "Great" };
+function displayLevelName(k) { var n = state.settings.names[k]; return n === FACTORY_NAMES[k] ? tr(n) : n; }
+
+/* ---------- day list (the adapted plan) ---------- */
+function renderDayList() {
+  var key = selected;
+  var ad = adaptedFor(key);
+  var score = L.dayScore(ad);
+  var d = L.parseKey(key);
+  var level = levelFor(key);
+  var names = state.settings.names;
+  var html = "<h3>" + d.toLocaleDateString(LOCALE, { weekday: "long", day: "numeric", month: "long" }) +
+    '<span class="dl-score">' + tr("{done} of {total} done at your {name} pace", { done: score.done, total: score.total, name: displayLevelName(level) }) + "</span></h3>";
+  html += '<div class="dl-progress"><i style="width:' + score.pct + '%"></i></div>';
+  if (!ad.visible.length && !ad.done.length) html += '<div class="empty-note dock-note"><span class="dock-skip">' + skipSvg("goodbye") + '</span><span>' + tr("Nothing today. Empty is allowed.") + '</span></div>';
+  ad.visible.forEach(function (t) { html += rowHtml(t, false); });
+  ad.done.forEach(function (t) { html += rowHtml(t, true); });
+  if (ad.stretch) html += '<div class="stretch-note">' + tr("One more from tomorrow:") + ' <strong>' + esc(ad.stretch.title) + '</strong><button data-act="stretch" data-id="' + ad.stretch.id + '">' + tr("Bring it to today") + '</button></div>';
+  if (ad.parked.length) html += '<p class="parked-note">' + tr(ad.parked.length === 1 ? "{n} thing parked. Parked, not dropped. Raise the level to bring them back." : "{n} things parked. Parked, not dropped. Raise the level to bring them back.", { n: ad.parked.length }) + "</p>";
+  $("dayList").innerHTML = html;
+  bindRows($("dayList"));
+}
+function rowHtml(t, done) {
+  var meta = [];
+  if (t.time) meta.push(t.time);
+  meta.push(tr("about {n} min", { n: t.durationMin }));
+  if (t.steps && t.steps.length) meta.push(tr("{a} of {b} steps", { a: t.steps.filter(function (s) { return s.done; }).length, b: t.steps.length }));
+  if (t.shrunk) meta.push(tr("small version"));
+  if (t.repeat) meta.push(tr(t.repeat));
+  return '<div draggable="true" class="task-row' + (done ? " is-done" : "") + '" data-id="' + t.id + '" data-date="' + t.instanceDate + '">' +
+    '<span class="tr-dot" style="background:' + t.color + '"></span>' +
+    '<span class="tr-main"><span class="tr-title">' + esc(t.displayTitle || t.title) + '</span><span class="tr-meta">' + esc(meta.join(" · ")) + "</span></span>" +
+    '<button class="tr-check" data-check="' + t.id + '" aria-label="' + tr("Mark done") + '">' + (done ? icon("i-check") : "") + "</button></div>";
+}
+function bindRows(root) {
+  root.querySelectorAll(".task-row").forEach(function (row) {
+    row.addEventListener("click", function (e) {
+      if (e.target.hasAttribute("data-check")) return;
+      openTask(row.getAttribute("data-id"), row.getAttribute("data-date"));
+    });
+  });
+  root.querySelectorAll("[data-check]").forEach(function (btn) {
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var row = btn.closest(".task-row");
+      toggleDone(row.getAttribute("data-id"), row.getAttribute("data-date"));
+    });
+  });
+  var st = root.querySelector('[data-act="stretch"]');
+  if (st) st.addEventListener("click", function () {
+    var t = baseTask(st.getAttribute("data-id"));
+    if (t) { moveInstance(t, L.addDays(selected, 1), selected); toast(tr("Brought to today. Only because you asked.")); refreshAll(); }
+  });
+}
+function toggleDone(id, dateKey) {
+  var t = baseTask(id); if (!t) return;
+  if (t.repeat) {
+    t.doneDates = t.doneDates || [];
+    var i = t.doneDates.indexOf(dateKey);
+    if (i === -1) t.doneDates.push(dateKey); else t.doneDates.splice(i, 1);
+  } else {
+    t.status = t.status === "done" ? "todo" : "done";
+    if (t.status === "done") toast(tr("Done. That counts."));
+  }
+  save(); refreshAll();
+}
+/* Move one occurrence of a (possibly repeating) task to another date. */
+function moveInstance(t, fromKey, toKey) {
+  if (t.repeat || fromKey !== t.date) {
+    t.skipDates = t.skipDates || [];
+    if (t.skipDates.indexOf(fromKey) === -1) t.skipDates.push(fromKey);
+    var copy = {}; for (var k in t) copy[k] = t[k];
+    copy.id = uid(); copy.date = toKey; copy.repeat = null; copy.skipDates = []; copy.doneDates = [];
+    copy.steps = (t.steps || []).map(function (s) { return { text: s.text, done: s.done }; });
+    state.tasks.push(copy);
+    return copy;
+  }
+  t.date = toKey;
+  return t;
+}
+
+/* ---------- up next ---------- */
+function renderUpNext() {
+  var el = $("upNext");
+  var today = L.todayKey();
+  if (selected !== today) { el.hidden = true; return; }
+  var ad = adaptedFor(today);
+  var now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  var timed = ad.visible.filter(function (t) { return t.time && L.toMin(t.time) >= nowMin; });
+  var next = timed[0] || ad.visible[0];
+  if (!next) { el.hidden = true; return; }
+  el.hidden = false;
+  var firstStep = (next.steps && next.steps.some(function (s) { return !s.done; })) ? L.nextStepText(next) : "";
+  el.innerHTML = '<span class="un-label">' + tr("Up next") + '</span><strong>' + esc(next.displayTitle || next.title) + "</strong> · " + tr("about {n} min", { n: next.durationMin }) +
+    (next.time ? " · " + next.time : "") + (firstStep ? "<br><span style='color:var(--ink-3)'>" + esc(firstStep) + "</span>" : "") + '<button data-un="' + next.id + '">' + tr("Start") + '</button>';
+  el.querySelector("[data-un]").addEventListener("click", function () {
+    var t = baseTask(next.id); if (t) { t.status = "doing"; save(); refreshAll(); toast(tr("Started. One step at a time.")); }
+  });
+}
+
+/* ---------- check-in ---------- */
+function renderCheckin() {
+  var level = state.feelings[selected];
+  document.querySelectorAll(".level-btn").forEach(function (b) {
+    b.classList.toggle("is-active", b.getAttribute("data-level") === level);
+  });
+  document.querySelectorAll("[data-level-name]").forEach(function (s) { s.textContent = displayLevelName(s.getAttribute("data-level-name")); });
+  var sl = $("sideLevel");
+  var todayLevel = state.feelings[L.todayKey()];
+  sl.innerHTML = todayLevel ? tr("Today:") + " <strong>" + esc(displayLevelName(todayLevel)) + "</strong>" : tr("No check-in yet today");
+  $("checkinQ").textContent = selected === L.todayKey() ? tr("How are you feeling today?") : tr("How does this day feel?");
+}
+document.querySelectorAll(".level-btn").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var level = b.getAttribute("data-level");
+    state.feelings[selected] = level; save();
+    markActivated("check-in");
+    if (level === "low") toast(tr("Bad day. Small list — the rest is parked, safe."));
+    else if (level === "full") toast(tr("Great day. A little more is on the table."));
+    else toast(tr("Ok day. A small, capped list."));
+    refreshAll();
+  });
+});
+
+/* ---------- calendar ---------- */
+function fcEvents() {
+  var a = L.addDays(selected, -45), b = L.addDays(selected, 80);
+  return instancesInRange(a, b).map(function (t) {
+    var ev = { id: t.id + "@" + t.instanceDate, taskId: t.id, instanceDate: t.instanceDate, title: t.title, allDay: !t.time, backgroundColor: t.color, borderColor: t.color, extendedProps: { taskId: t.id, instanceDate: t.instanceDate } };
+    if (t.time) {
+      var startMin = L.toMin(t.time);
+      ev.start = t.instanceDate + "T" + t.time + ":00";
+      ev.end = t.instanceDate + "T" + L.toHHMM(startMin + t.durationMin) + ":00";
+      if (startMin + t.durationMin >= 1440) { ev.end = L.addDays(t.instanceDate, 1) + "T" + L.toHHMM(startMin + t.durationMin) + ":00"; }
+    } else { ev.start = t.instanceDate; }
+    if (t.status === "done") ev.classNames = ["ev-done"];
+    return ev;
+  });
+}
+function initCalendar() {
+  calendar = new FullCalendar.Calendar($("calendar"), {
+    initialView: "dayGridMonth",
+    locale: PACE_LANG === "es" ? "es" : "en",
+    height: "auto",
+    firstDay: 1,
+    headerToolbar: false,
+    editable: true,
+    dayMaxEvents: 3,
+    slotMinTime: "06:00:00",
+    slotMaxTime: "22:00:00",
+    scrollTime: "07:30:00",
+    eventDidMount: function (info) {
+      var c = info.event.backgroundColor || "#5b6bd5";
+      info.el.classList.add("ev-calm");
+      info.el.style.setProperty("--ev-c", c);
+      if (info.el.classList.contains("fc-daygrid-event") || info.el.classList.contains("fc-timegrid-event")) {
+        info.el.style.background = "color-mix(in srgb, " + c + " 15%, var(--card))";
+        info.el.style.borderLeft = "3px solid " + c;
+        info.el.style.color = "var(--ink)";
+      }
+    },
+    eventDurationEditable: true,
+    longPressDelay: 250,
+    events: fcEvents(),
+    dateClick: function (info) { selectDate(info.dateStr.slice(0, 10), false); },
+    eventClick: function (info) { openTask(info.event.extendedProps.taskId, info.event.extendedProps.instanceDate); },
+    eventDrop: function (info) {
+      var t = baseTask(info.event.extendedProps.taskId); if (!t) return;
+      var fromKey = info.event.extendedProps.instanceDate;
+      var newStart = info.event.start;
+      var newKey = L.toKey(newStart);
+      if (t.repeat || fromKey !== t.date) {
+        var copy = moveInstance(t, fromKey, newKey);
+        if (info.event.allDay === false && newStart.getHours() !== undefined) copy.time = L.pad(newStart.getHours()) + ":" + L.pad(newStart.getMinutes());
+      } else {
+        t.date = newKey;
+        if (!info.event.allDay) t.time = L.pad(newStart.getHours()) + ":" + L.pad(newStart.getMinutes());
+      }
+      save(); refreshAll(); toast(tr("Moved. The day re-shaped itself."));
+    },
+    eventResize: function (info) {
+      var t = baseTask(info.event.extendedProps.taskId); if (!t) return;
+      var mins = Math.max(5, Math.round((info.event.end - info.event.start) / 60000));
+      t.durationMin = mins; save(); refreshAll();
+    },
+    datesSet: function () { renderTitle(); }
+  });
+  calendar.render();
+  var style = document.createElement("style");
+  style.textContent = ".ev-done{opacity:.45} .ev-done .fc-event-title{text-decoration:line-through}";
+  document.head.appendChild(style);
+}
+function renderTitle() {
+  var d = calendar ? calendar.getDate() : L.parseKey(selected);
+  $("monthTitle").textContent = d.toLocaleDateString(LOCALE, { month: "long", year: "numeric" });
+}
+function refreshCalendar() {
+  if (!calendar) return;
+  calendar.removeAllEvents();
+  fcEvents().forEach(function (e) { calendar.addEvent(e); });
+}
+function selectDate(key, jumpCalendar) {
+  selected = key;
+  if (calendar && jumpCalendar) calendar.gotoDate(key);
+  renderTicker(); renderDayList(); renderUpNext(); renderCheckin(); renderYear();
+}
+$("monthTitle").addEventListener("click", function () { selectDate(L.todayKey(), true); });
+document.querySelectorAll(".segmented button").forEach(function (b) {
+  b.addEventListener("click", function () {
+    document.querySelectorAll(".segmented button").forEach(function (x) { x.classList.remove("is-active"); });
+    b.classList.add("is-active");
+    var v = b.getAttribute("data-view");
+    currentView = v;
+    if (v === "year") { $("calendar").hidden = true; $("yearView").hidden = false; renderYear(); }
+    else { $("calendar").hidden = false; $("yearView").hidden = true; calendar.changeView(v, selected); }
+  });
+});
+function renderYear() {
+  if (currentView !== "year") return;
+  var year = L.parseKey(selected).getFullYear();
+  var html = '<div class="year-grid">';
+  var monthNames = []; for (var mn = 0; mn < 12; mn++) monthNames.push(new Date(2024, mn, 1).toLocaleDateString(LOCALE, { month: "long" }));
+  for (var m = 0; m < 12; m++) {
+    var first = new Date(year, m, 1);
+    var daysIn = new Date(year, m + 1, 0).getDate();
+    var lead = (first.getDay() + 6) % 7;
+    html += '<div class="mini-month"><h4>' + monthNames[m] + '</h4><div class="mm-grid">';
+    for (var i = 0; i < lead; i++) html += '<span class="mm-day mm-blank"></span>';
+    for (var dnum = 1; dnum <= daysIn; dnum++) {
+      var key = year + "-" + L.pad(m + 1) + "-" + L.pad(dnum);
+      var count = tasksOn(key).filter(function (t) { return t.status !== "done"; }).length;
+      var cls = "mm-day" + (count === 1 ? " has-1" : count === 2 ? " has-2" : count >= 3 ? " has-3" : "") + (key === L.todayKey() ? " is-today" : "");
+      html += '<button class="' + cls + '" data-ydate="' + key + '">' + dnum + "</button>";
+    }
+    html += "</div></div>";
+  }
+  $("yearView").innerHTML = html + "</div>";
+  $("yearView").querySelectorAll("[data-ydate]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.querySelector('.segmented button[data-view="timeGridDay"]').click();
+      selectDate(btn.getAttribute("data-ydate"), true);
+    });
+  });
+}
+
+/* ---------- panels ---------- */
+document.querySelectorAll(".side-item").forEach(function (b) {
+  b.addEventListener("click", function () {
+    document.querySelectorAll(".side-item").forEach(function (x) { x.classList.remove("is-active"); });
+    document.querySelectorAll(".panel").forEach(function (x) { x.classList.remove("is-active"); });
+    b.classList.add("is-active");
+    $("panel-" + b.getAttribute("data-panel")).classList.add("is-active");
+    if (b.getAttribute("data-panel") === "progress") renderProgress();
+    if (b.getAttribute("data-panel") === "capture") maybePlus("talk");
+    // Phone + the Muse-app shape: choosing an area shows it —
+    // the menu gives the screen back (the sliver tap and the
+    // close button do the same when no choice is made).
+    if (window.innerWidth <= 700 && !state.settings.sidebarCollapsed) {
+      state.settings.sidebarCollapsed = true; save(); applySidebar();
+    }
+  });
+});
+// The sliver: one tap on the squeezed content strip closes
+// the menu and returns the full screen (phone widths; the
+// element only exists visually there, while the menu is open).
+$("sbSliver").addEventListener("click", function () {
+  state.settings.sidebarCollapsed = true; save(); applySidebar();
+});
+function showPanel(name) { document.querySelector('.side-item[data-panel="' + name + '"]').click(); }
+
+/* ---------- quick add ---------- */
+$("addBtn").addEventListener("click", function () {
+  $("quickText").value = ""; $("fTitle").value = "";
+  $("fDate").value = selected; $("fTime").value = ""; $("fDur").value = 25;
+  $("fMin").value = ""; $("fFull").value = ""; $("fEssential").checked = false;
+  $("quickPreview").hidden = true;
+  $("addSheet").hidden = false;
+  setTimeout(function () { $("quickText").focus(); }, 50);
+});
+$("addCancel").addEventListener("click", function () { $("addSheet").hidden = true; });
+$("quickText").addEventListener("input", function () {
+  var v = $("quickText").value.trim();
+  if (!v) { $("quickPreview").hidden = true; return; }
+  var item = L.parseItem(v, selected);
+  if (!item) { $("quickPreview").hidden = true; return; }
+  $("quickPreview").hidden = false;
+  $("quickPreview").innerHTML = "<strong>" + esc(item.title) + "</strong><br>" +
+    esc(L.parseKey(item.date).toLocaleDateString(LOCALE, { weekday: "short", day: "numeric", month: "short" })) +
+    (item.time ? tr(" at {time}", { time: item.time }) : tr(" · no time yet")) + " · " + tr("about {n} min", { n: item.durationMin }) +
+    (item.repeat ? " · " + esc(item.repeat) : "") + (item.essential ? " · must not slip" : "");
+});
+$("addSave").addEventListener("click", function () {
+  var task = null;
+  var manualTitle = $("fTitle").value.trim();
+  if (manualTitle) {
+    var cat = L.categoryFor(manualTitle);
+    task = { title: manualTitle, date: $("fDate").value || selected, time: $("fTime").value || null, durationMin: Math.max(5, +$("fDur").value || 25), priority: 0, repeat: null, category: cat.id, color: cat.color, essential: $("fEssential").checked, steps: L.decompose(manualTitle, +$("fDur").value || 25, false), minVersion: $("fMin").value.trim(), fullVersion: $("fFull").value.trim() };
+  } else if ($("quickText").value.trim()) {
+    var item = L.parseItem($("quickText").value.trim(), selected);
+    if (item) task = { title: item.title, date: item.date, time: item.time, durationMin: item.durationMin, priority: item.priority, repeat: item.repeat, category: item.category, color: item.color, essential: item.essential, steps: item.steps, minVersion: $("fMin").value.trim(), fullVersion: $("fFull").value.trim() };
+  }
+  if (!task) { toast(tr("Give it a title first, even a messy one.")); return; }
+  task.id = uid(); task.status = "todo"; task.source = "manual"; task.originalText = $("quickText").value.trim(); task.skipDates = []; task.doneDates = [];
+  state.tasks.push(task); save(); markActivated("event");
+  $("addSheet").hidden = true;
+  selectDate(task.date, true); refreshAll();
+  toast(tr("Added. Small and clear."));
+});
+
+/* ---------- task sheet ---------- */
+function openTask(id, instanceDate) {
+  var t = baseTask(id); if (!t) return;
+  currentTaskId = id; currentInstanceDate = instanceDate || t.date;
+  var inst = instanceOf(t, currentInstanceDate);
+  $("dTitle").textContent = inst.title;
+  var meta = [];
+  meta.push(L.parseKey(currentInstanceDate).toLocaleDateString(LOCALE, { weekday: "long", day: "numeric", month: "long" }));
+  if (inst.time) meta.push(inst.time);
+  meta.push(tr("about {n} min", { n: inst.durationMin }));
+  if (inst.repeat) meta.push(tr("repeats {repeat} · changes to date or done apply to this day only", { repeat: tr(inst.repeat) }));
+  if (inst.source === "sample") meta.push(tr("sample task"));
+  $("dMeta").textContent = meta.join(" · ");
+  renderSteps(t);
+  $("dMin").value = t.minVersion || "";
+  $("dFull").value = t.fullVersion || "";
+  $("dDate").value = currentInstanceDate;
+  $("dTime").value = t.time || "";
+  $("dDur").value = t.durationMin;
+  $("dEssential").checked = !!t.essential;
+  if (t.originalText) { $("dOriginalWrap").hidden = false; $("dOriginal").textContent = t.originalText; }
+  else $("dOriginalWrap").hidden = true;
+  $("taskSheet").hidden = false;
+}
+function renderSteps(t) {
+  var box = $("dSteps");
+  $("dBreak").hidden = !!(t.steps && t.steps.length);
+  if (!t.steps || !t.steps.length) { box.innerHTML = '<p class="hint">' + tr("No steps yet.") + '</p>'; return; }
+  box.innerHTML = t.steps.map(function (s, i) {
+    return '<label class="step-row' + (s.done ? " is-done" : "") + '"><input type="checkbox" data-step="' + i + '"' + (s.done ? " checked" : "") + "><span>" + esc(s.text) + "</span></label>";
+  }).join("");
+  box.querySelectorAll("[data-step]").forEach(function (cb) {
+    cb.addEventListener("change", function () {
+      t.steps[+cb.getAttribute("data-step")].done = cb.checked;
+      save(); renderSteps(t); refreshAll();
+    });
+  });
+}
+$("dBreak").addEventListener("click", function () {
+  var t = baseTask(currentTaskId); if (!t) return;
+  /* One break per task: a second tap used to append a whole duplicate
+     set of steps (PACE-008). The button hides once steps exist; this
+     guard covers a fast double-tap before the hide lands. */
+  if (t.steps && t.steps.length) { toast(tr("This one already has its steps.")); return; }
+  t.steps = L.decompose(t.title, t.durationMin, true);
+  save(); renderSteps(t); refreshAll(); toast(tr("Broken down. Only the first step matters right now."));
+});
+function persistSheetFields() {
+  var t = baseTask(currentTaskId); if (!t) return;
+  t.minVersion = $("dMin").value.trim();
+  t.fullVersion = $("dFull").value.trim();
+  t.time = $("dTime").value || null;
+  t.durationMin = Math.max(5, +$("dDur").value || t.durationMin);
+  t.essential = $("dEssential").checked;
+  var newDate = $("dDate").value;
+  if (newDate && newDate !== currentInstanceDate) {
+    moveInstance(t, currentInstanceDate, newDate);
+    currentInstanceDate = newDate;
+  }
+  save();
+}
+["dMin", "dFull", "dTime", "dDur", "dEssential", "dDate"].forEach(function (id) {
+  $(id).addEventListener("change", function () { persistSheetFields(); refreshAll(); });
+});
+$("dClose").addEventListener("click", function () { persistSheetFields(); $("taskSheet").hidden = true; refreshAll(); });
+$("dDone").addEventListener("click", function () { persistSheetFields(); toggleDone(currentTaskId, currentInstanceDate); $("taskSheet").hidden = true; });
+$("dDoing").addEventListener("click", function () {
+  var t = baseTask(currentTaskId); if (!t) return;
+  persistSheetFields();
+  if (t.repeat) { t.doneDates = (t.doneDates || []).filter(function (d) { return d !== currentInstanceDate; }); }
+  t.status = "doing"; save(); $("taskSheet").hidden = true; refreshAll(); toast(tr("Doing. One step at a time."));
+});
+$("dNotToday").addEventListener("click", function () {
+  var t = baseTask(currentTaskId); if (!t) return;
+  persistSheetFields();
+  moveInstance(t, currentInstanceDate, L.addDays(currentInstanceDate, 1));
+  save(); $("taskSheet").hidden = true; refreshAll();
+  toast(tr("Moved to tomorrow. That counts as handling it."));
+});
+$("dDelete").addEventListener("click", function () {
+  var t = baseTask(currentTaskId); if (!t) return;
+  if (t.repeat) {
+    t.skipDates = t.skipDates || [];
+    if (t.skipDates.indexOf(currentInstanceDate) === -1) t.skipDates.push(currentInstanceDate);
+    toast(tr("Removed for this day. The rest of the series stays."), function () {
+      t.skipDates = t.skipDates.filter(function (d) { return d !== currentInstanceDate; });
+      save(); refreshAll(); toast(tr("Back again."));
+    });
+  } else {
+    var taskIdx = state.tasks.indexOf(t);
+    state.tasks = state.tasks.filter(function (x) { return x.id !== currentTaskId; });
+    toast(tr("Deleted."), function () { restoreAt(state.tasks, t, taskIdx); save(); refreshAll(); toast(tr("Back again.")); });
+  }
+  save(); $("taskSheet").hidden = true; refreshAll();
+});
+
+/* ---------- capture ---------- */
+$("parseBtn").addEventListener("click", function () {
+  var text = $("dumpText").value;
+  drafts = L.parseDump(text, L.todayKey());
+  if (!drafts.length) { $("captureMsg").textContent = tr("Nothing I could sort yet. Try one thing per line, like: call the dentist tomorrow at 3pm."); return; }
+  $("captureMsg").textContent = "";
+  renderDrafts(text);
+});
+function renderDrafts(original) {
+  $("draftArea").hidden = false;
+  $("originalText").textContent = original;
+  var box = $("draftList"); box.innerHTML = "";
+  drafts.forEach(function (d, i) {
+    var card = document.createElement("div");
+    card.className = "draft-card";
+    card.innerHTML = '<span class="tr-dot" style="background:' + d.color + '"></span><div style="flex:1">' +
+      '<input type="text" data-f="title" value="' + esc(d.title) + '">' +
+      '<div class="dc-meta"><input type="date" data-f="date" value="' + d.date + '"><input type="time" data-f="time" value="' + (d.time || "") + '"><input type="number" data-f="durationMin" value="' + d.durationMin + '" min="5" step="5" style="width:76px"><span class="hint">' + tr("min") + '</span>' +
+      (d.repeat ? '<span class="hint">' + esc(tr(d.repeat)) + "</span>" : "") + (d.essential ? '<span class="hint">' + tr("must not slip") + '</span>' : "") + "</div>" +
+      (d.steps && d.steps.length ? '<ol class="dc-steps">' + d.steps.map(function (s) { return "<li>" + esc(s.text) + "</li>"; }).join("") + "</ol>" : "") +
+      '</div><button class="dc-del" data-del="' + i + '">' + tr("Remove") + '</button>';
+    card.querySelectorAll("[data-f]").forEach(function (inp) {
+      inp.addEventListener("change", function () {
+        var f = inp.getAttribute("data-f");
+        if (f === "durationMin") drafts[i].durationMin = Math.max(5, +inp.value || 25);
+        else if (f === "time") drafts[i].time = inp.value || null;
+        else drafts[i][f] = inp.value;
+      });
+    });
+    card.querySelector("[data-del]").addEventListener("click", function () { drafts.splice(i, 1); renderDrafts(original); });
+    box.appendChild(card);
+  });
+}
+$("draftClear").addEventListener("click", function () { drafts = []; $("draftArea").hidden = true; $("dumpText").value = ""; });
+$("draftAddAll").addEventListener("click", function () {
+  var original = $("dumpText").value;
+  drafts.forEach(function (d) {
+    state.tasks.push({ id: uid(), title: d.title, date: d.date, time: d.time, durationMin: d.durationMin, priority: d.priority, repeat: d.repeat, category: d.category, color: d.color, essential: d.essential, status: "todo", steps: d.steps || [], minVersion: "", fullVersion: "", source: "capture", originalText: original, skipDates: [], doneDates: [] });
+  });
+  save(); if (drafts.length) markActivated("event");
+  var n = drafts.length;
+  drafts = []; $("draftArea").hidden = true; $("dumpText").value = "";
+  showPanel("calendar"); selectDate(L.todayKey(), true); refreshAll();
+  toast(tr(n === 1 ? "{n} thing sorted onto your calendar." : "{n} things sorted onto your calendar.", { n: n }));
+});
+$("journalFile").addEventListener("change", function (e) {
+  var f = e.target.files[0]; if (!f) return;
+  var r = new FileReader();
+  r.onload = function () { $("dumpText").value = String(r.result || ""); $("captureMsg").textContent = tr("Journal loaded. Tap Make my list when you are ready."); };
+  r.readAsText(f);
+});
+/* Voice engine: ONE engine for every Speak button. In the store app it
+   uses the device recogniser (Capacitor SpeechRecognition plugin —
+   the WebView offers no web speech of its own, which is why dictation
+   "did not work at all" there). In a browser it uses Web Speech with
+   live words while you talk. Errors say what actually went wrong.
+   Typing always works exactly the same. */
+var voiceSession = null;
+function voiceErrorText(code) {
+  if (code === "not-allowed" || code === "service-not-allowed") return tr("The microphone is blocked. Allow the mic for Pace, then tap Speak again. Typing works the same.");
+  if (code === "audio-capture") return tr("No microphone could be found. Typing works the same.");
+  if (code === "no-speech") return tr("I did not hear anything. Try again, a little closer. Typing works the same.");
+  if (code === "network") return tr("Voice typing needs the internet on this device. Typing works the same.");
+  if (code === "aborted") return "";
+  return tr("Voice did not come through. Typing works the same.");
+}
+function nativeSpeech() {
+  try {
+    var C = window.Capacitor;
+    if (C && typeof C.isNativePlatform === "function" && C.isNativePlatform() && C.Plugins && C.Plugins.SpeechRecognition) return C.Plugins.SpeechRecognition;
+  } catch (e) {}
+  return null;
+}
+/* hooks: { msg(text), final(text), btn } — final fires per finished phrase. */
+function toggleVoice(hooks) {
+  if (voiceSession) { voiceSession.stop(); return; }
+  var btn = hooks.btn, span = btn.querySelector("span");
+  var done = function () { voiceSession = null; if (span) span.textContent = tr("Speak"); };
+  var nat = nativeSpeech();
+  if (nat) {
+    var stopped = false;
+    voiceSession = { stop: function () { stopped = true; try { nat.stop(); } catch (e) {} done(); } };
+    if (span) span.textContent = tr("Stop");
+    hooks.msg("Listening… talk away, then tap Stop.");
+    nat.requestPermissions().then(function (perm) {
+      if (perm && perm.speechRecognition && perm.speechRecognition !== "granted") { hooks.msg(voiceErrorText("not-allowed")); done(); return null; }
+      var partialH = null;
+      if (typeof nat.addListener === "function") {
+        nat.addListener("partialResults", function (d) { if (!stopped && d && d.matches && d.matches[0]) hooks.msg("Listening… " + d.matches[0]); }).then(function (h) { partialH = h; });
+      }
+      return nat.start({ language: "en-AU", partialResults: true, popup: false, maxResults: 1 }).then(function (res) {
+        if (partialH && partialH.remove) partialH.remove();
+        var said = res && res.matches && res.matches[0] ? String(res.matches[0]).trim() : "";
+        if (said) hooks.final(said); else if (!stopped) hooks.msg(voiceErrorText("no-speech"));
+        done();
+      });
+    }).catch(function () { if (!stopped) hooks.msg(voiceErrorText("")); done(); });
+    return;
+  }
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { hooks.msg("Voice is not offered by this browser. Typing in the box works exactly the same."); return; }
+  var rec = new SR();
+  rec.lang = "en-AU"; rec.interimResults = true; rec.continuous = true;
+  var heardFinal = false;
+  voiceSession = { stop: function () { try { rec.stop(); } catch (e) {} } };
+  if (span) span.textContent = tr("Stop");
+  hooks.msg("Listening… talk away, then tap Stop.");
+  rec.onresult = function (ev) {
+    var interim = "";
+    for (var i = ev.resultIndex; i < ev.results.length; i++) {
+      var r = ev.results[i], txt = r[0].transcript;
+      if (r.isFinal) { var t = txt.trim(); if (t) { heardFinal = true; hooks.final(t); } }
+      else interim += txt;
+    }
+    /* Once a final has landed, the message belongs to the final hook
+       (the "check the words" nudge) — interim previews must not stomp
+       it (QA v13 audit note 3). */
+    if (!heardFinal && interim.trim()) hooks.msg("Listening… " + interim.trim());
+  };
+  rec.onerror = function (ev) { var m = voiceErrorText(ev && ev.error); if (m) hooks.msg(m); };
+  rec.onend = function () { done(); };
+  try { rec.start(); } catch (e) { hooks.msg(voiceErrorText("")); done(); }
+}
+$("voiceBtn").addEventListener("click", function () {
+  toggleVoice({
+    btn: $("voiceBtn"),
+    msg: function (t) { $("captureMsg").textContent = t; },
+    final: function (said) {
+      $("dumpText").value = ($("dumpText").value ? $("dumpText").value + "\n" : "") + said;
+      $("captureMsg").textContent = tr("Got it. Check the words, then tap Make my list.");
+    }
+  });
+});
+/* Handwriting photo: OCR runs on-device with the Tesseract.js copy bundled
+   in vendor/tesseract (worker, LSTM core and English data are local too).
+   Shared by Talk to it and To do; onText receives the words found. */
+/* In the store build, bundletool stores the language file decompressed as
+   eng.traineddata (it strips .gz); on the web the .gz is served as-is.
+   gzip:false makes Tesseract ask for the raw name the bundle carries. */
+var OCR_IN_APP = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === "function" && window.Capacitor.isNativePlatform());
+var OCR_OPTIONS = {
+  workerPath: "vendor/tesseract/worker.min.js",
+  corePath: "vendor/tesseract/core",
+  langPath: "vendor/tesseract/lang",
+  cacheMethod: "none",
+  gzip: !OCR_IN_APP
+};
+function ocrPhoto(f, msgEl, onText) {
+  msgEl.textContent = tr("Reading your photo. This can take a little while the first time.");
+  if (!window.Tesseract) {
+    msgEl.textContent = tr("The reading tool did not load. Typing or speaking works the same.");
+    return;
+  }
+  window.Tesseract.recognize(f, "eng", OCR_OPTIONS).then(function (res) {
+    var text = (res && res.data && res.data.text || "").trim();
+    if (text) onText(text);
+    else msgEl.textContent = tr("I could not read words in that photo. Typing or speaking works the same.");
+  }).catch(function () { msgEl.textContent = tr("Reading the photo did not work this time. Typing or speaking works the same."); });
+}
+$("photoFile").addEventListener("change", function (e) {
+  var f = e.target.files[0]; if (!f) return;
+  ocrPhoto(f, $("captureMsg"), function (text) {
+    $("dumpText").value = ($("dumpText").value ? $("dumpText").value + "\n" : "") + text;
+    $("captureMsg").textContent = tr("Here is what I could read. Fix any words, then tap Make my list.");
+  });
+});
+
+/* ---------- to do: a fast list that lives happily beside the calendar ---------- */
+function addTodo(text) {
+  text = (text || "").trim();
+  if (!text) return null;
+  var item = { id: uid(), text: text, done: false, calTaskId: null };
+  state.todos.unshift(item);
+  return item;
+}
+function todoLinked(item) {
+  return !!(item.calTaskId && state.tasks.some(function (t) { return t.id === item.calTaskId; }));
+}
+function linkTodo(item) {
+  if (todoLinked(item)) return false;
+  var cat = L.categoryFor(item.text);
+  var task = { id: uid(), title: item.text, date: L.todayKey(), time: null, durationMin: 25, priority: 0, repeat: null, category: cat.id, color: cat.color, essential: false, status: "todo", steps: L.decompose(item.text, 25, false), minVersion: "", fullVersion: "", source: "todo", originalText: "", skipDates: [], doneDates: [] };
+  state.tasks.push(task);
+  item.calTaskId = task.id;
+  markActivated("event");
+  return true;
+}
+function renderTodos() {
+  var wrap = $("todoList"); if (!wrap) return;
+  wrap.innerHTML = "";
+  if (!state.todos.length) wrap.innerHTML = '<div class="empty-note">' + icon("i-todo") + "<span>" + tr("Nothing here. Write one fast, above.") + "</span></div>";
+  state.todos.forEach(function (item) {
+    var row = document.createElement("div");
+    row.className = "todo-row" + (item.done ? " is-done" : "");
+    row.innerHTML =
+      '<button class="todo-tick" data-act="tick" aria-label="' + tr("Mark done") + '">' + (item.done ? icon("i-check") : "") + "</button>" +
+      '<span class="todo-text"></span>' +
+      '<button class="todo-cal' + (todoLinked(item) ? " is-on" : "") + '" data-act="cal" aria-label="' + tr("Put on the calendar") + '" title="' + tr("Put on the calendar") + '">' + icon("i-calplus") + "</button>" +
+      '<button class="todo-del" data-act="del" aria-label="' + tr("Delete") + '">' + icon("i-trash") + "</button>";
+    row.querySelector(".todo-text").textContent = item.text;
+    row.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var act = b.getAttribute("data-act");
+        if (act === "tick") { item.done = !item.done; save(); renderTodos(); }
+        else if (act === "del") { var todoIdx = state.todos.indexOf(item); state.todos = state.todos.filter(function (t) { return t.id !== item.id; }); save(); renderTodos(); toast(tr("Deleted."), function () { restoreAt(state.todos, item, todoIdx); save(); renderTodos(); toast(tr("Back again.")); }); }
+        else if (act === "cal") {
+          if (todoLinked(item)) {
+            var linked = baseTask(item.calTaskId); var linkedIdx = linked ? state.tasks.indexOf(linked) : -1;
+            state.tasks = state.tasks.filter(function (t) { return t.id !== item.calTaskId; });
+            item.calTaskId = null; save(); refreshAll();
+            toast(tr("Off the calendar. Still on your list."), linked ? function () { restoreAt(state.tasks, linked, linkedIdx); item.calTaskId = linked.id; save(); refreshAll(); toast(tr("Back again.")); } : undefined);
+          } else if (linkTodo(item)) { save(); refreshAll(); toast(tr("On today's calendar.")); }
+        }
+      });
+    });
+    wrap.appendChild(row);
+  });
+  $("todoClearDone").hidden = !state.todos.some(function (t) { return t.done; });
+}
+function submitTodoInput() {
+  if (addTodo($("todoInput").value)) { $("todoInput").value = ""; save(); renderTodos(); }
+}
+$("todoAddBtn").addEventListener("click", submitTodoInput);
+$("todoInput").addEventListener("keydown", function (e) { if (e.key === "Enter") submitTodoInput(); });
+$("todoClearDone").addEventListener("click", function () {
+  var cleared = []; state.todos.forEach(function (t, i) { if (t.done) cleared.push([t, i]); });
+  state.todos = state.todos.filter(function (t) { return !t.done; });
+  save(); renderTodos();
+  toast(tr("Done list cleared."), function () { cleared.forEach(function (p) { restoreAt(state.todos, p[0], p[1]); }); save(); renderTodos(); toast(tr("Back again.")); });
+});
+$("todoCalAll").addEventListener("click", function () {
+  var n = 0;
+  state.todos.forEach(function (item) { if (!item.done && linkTodo(item)) n++; });
+  save(); refreshAll();
+  toast(n ? tr(n === 1 ? "{n} item on today's calendar." : "{n} items on today's calendar.", { n: n }) : tr("Everything is already on the calendar."));
+});
+$("todoVoiceBtn").addEventListener("click", function () {
+  toggleVoice({
+    btn: $("todoVoiceBtn"),
+    msg: function (t) { $("todoMsg").textContent = t; },
+    final: function (said) { if (addTodo(said)) { save(); renderTodos(); toast(tr("Added: {x}", { x: said })); } }
+  });
+});
+$("todoPhoto").addEventListener("change", function (e) {
+  var f = e.target.files[0]; if (!f) return;
+  ocrPhoto(f, $("todoMsg"), function (text) {
+    var lines = text.split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
+    if (!lines.length) { $("todoMsg").textContent = tr("I could not read a list in that photo."); return; }
+    var list = $("todoDraftList"); list.innerHTML = "";
+    lines.forEach(function (line) {
+      var lab = document.createElement("label");
+      lab.className = "todo-draft-line";
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = true; cb.value = line;
+      var sp = document.createElement("span"); sp.textContent = line;
+      lab.appendChild(cb); lab.appendChild(sp); list.appendChild(lab);
+    });
+    $("todoDraftArea").hidden = false;
+    $("todoMsg").textContent = "Here is what I could read. Untick anything that is not a to-do.";
+  });
+});
+$("todoDraftAdd").addEventListener("click", function () {
+  var n = 0;
+  $("todoDraftList").querySelectorAll("input[type=checkbox]:checked").forEach(function (cb) { if (addTodo(cb.value)) n++; });
+  $("todoDraftArea").hidden = true;
+  save(); renderTodos();
+  toast(n ? tr(n === 1 ? "{n} to-do added." : "{n} to-dos added.", { n: n }) : tr("Nothing ticked, nothing added."));
+});
+$("todoDraftClear").addEventListener("click", function () { $("todoDraftArea").hidden = true; });
+
+/* ---------- habits: an icon, a tick, a run of dots ---------- */
+function habitIconId(key) { return key === "heart" ? "i-heart" : "i-h-" + key; }
+var habitPick = "star";
+function renderIconPicker() {
+  var wrap = $("habitIcons"); if (!wrap) return;
+  wrap.innerHTML = "";
+  L.HABIT_ICONS.forEach(function (key) {
+    var b = document.createElement("button");
+    b.className = "icon-pick" + (key === habitPick ? " is-on" : "");
+    b.setAttribute("aria-label", "Icon: " + key);
+    b.innerHTML = icon(habitIconId(key));
+    b.addEventListener("click", function () { habitPick = key; renderIconPicker(); });
+    wrap.appendChild(b);
+  });
+}
+function renderHabits() {
+  var wrap = $("habitList"); if (!wrap) return;
+  wrap.innerHTML = "";
+  if (!state.habits.length) wrap.innerHTML = '<div class="empty-note">' + icon("i-habits") + "<span>" + tr("No habits yet. Name one and pick its icon below.") + "</span></div>";
+  var today = L.todayKey();
+  state.habits.forEach(function (h, idx) {
+    var info = L.streakInfo(h.days, today);
+    var row = document.createElement("div");
+    row.className = "habit-row";
+    var dots = info.last7.map(function (d, i) {
+      return '<button class="week-dot' + (d.done ? " is-done" : "") + (i === 6 ? " is-today" : "") + '" data-key="' + d.key + '" aria-label="Toggle ' + d.key + '"></button>';
+    }).join("");
+    var streakDots = "";
+    for (var i = 0; i < Math.min(info.current, 10); i++) streakDots += '<span class="streak-dot"></span>';
+    row.innerHTML =
+      '<span class="habit-ico tint-' + (idx % 6) + '">' + icon(habitIconId(h.icon)) + "</span>" +
+      '<span class="habit-main"><span class="habit-name"></span>' +
+      '<span class="habit-streak">' + streakDots + (info.current ? '<span class="streak-num">' + tr("{n} in a row", { n: info.current }) + "</span>" : '<span class="streak-none">' + tr("No run yet") + "</span>") + "</span></span>" +
+      '<span class="habit-week">' + dots + "</span>" +
+      '<button class="habit-tick' + (h.days[today] ? " is-done" : "") + '" aria-label="' + tr("Done today") + '">' + (h.days[today] ? icon("i-check") : "") + "</button>" +
+      '<button class="habit-del" aria-label="' + tr("Delete habit") + '">' + icon("i-trash") + "</button>";
+    row.querySelector(".habit-name").textContent = h.name;
+    row.querySelectorAll(".week-dot").forEach(function (d) {
+      d.addEventListener("click", function () {
+        var k = d.getAttribute("data-key");
+        if (h.days[k]) delete h.days[k]; else h.days[k] = true;
+        save(); renderHabits();
+      });
+    });
+    row.querySelector(".habit-tick").addEventListener("click", function () {
+      if (h.days[today]) delete h.days[today]; else h.days[today] = true;
+      save(); renderHabits();
+    });
+    row.querySelector(".habit-del").addEventListener("click", function () {
+      var habitIdx = state.habits.indexOf(h);
+      state.habits = state.habits.filter(function (x) { return x.id !== h.id; });
+      save(); renderHabits();
+      toast(tr("Habit removed."), function () { restoreAt(state.habits, h, habitIdx); save(); renderHabits(); toast(tr("Back again.")); });
+    });
+    wrap.appendChild(row);
+  });
+  renderIconPicker();
+}
+function submitHabit() {
+  var name = $("habitName").value.trim();
+  if (!name) { toast(tr("Give the habit a name first.")); return; }
+  state.habits.push({ id: uid(), name: name, icon: habitPick, days: {} });
+  $("habitName").value = "";
+  save(); renderHabits();
+}
+$("habitAddBtn").addEventListener("click", submitHabit);
+$("habitName").addEventListener("keydown", function (e) { if (e.key === "Enter") submitHabit(); });
+
+/* ---------- progress board ---------- */
+function renderProgress() {
+  var all = state.tasks;
+  var doneCount = all.filter(function (t) { return t.status === "done" || (t.doneDates || []).length; }).length;
+  var todayAd = adaptedFor(L.todayKey());
+  var ts = L.dayScore(todayAd);
+  $("progressSummary").innerHTML =
+    "<div><strong>" + tr("{a} of {b}", { a: ts.done, b: ts.total }) + "</strong>" + tr("done today, at your pace") + "</div>" +
+    "<div><strong>" + all.filter(function (t) { return t.status === "doing"; }).length + "</strong>" + tr("in progress") + "</div>" +
+    "<div><strong>" + all.filter(function (t) { return t.status !== "done"; }).length + "</strong>" + tr("still on the list, all safe") + "</div>" +
+    "<div><strong>" + doneCount + "</strong>" + tr("things finished, counted forever") + "</div>";
+  ["todo", "doing", "done"].forEach(function (status) {
+    var col = $("col-" + status); col.innerHTML = "";
+    var list = all.filter(function (t) { return t.status === status; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    if (!list.length) col.innerHTML = '<p class="hint">' + tr("Nothing here right now.") + '</p>';
+    list.forEach(function (t) {
+      var card = document.createElement("div");
+      card.className = "p-card"; card.draggable = true; card.setAttribute("data-pid", t.id);
+      card.innerHTML = '<span class="pc-title">' + esc(t.title) + '</span><span class="pc-meta"><span class="tr-dot" style="background:' + t.color + '"></span>' +
+        esc(L.parseKey(t.date).toLocaleDateString(LOCALE, { weekday: "short", day: "numeric", month: "short" })) + (t.time ? " · " + t.time : "") + " · " + tr("{n} min", { n: t.durationMin }) + (t.repeat ? " · " + esc(t(t.repeat)) : "") + "</span>";
+      card.addEventListener("click", function () { openTask(t.id, t.date); });
+      card.addEventListener("dragstart", function (e) { e.dataTransfer.setData("text/plain", t.id); });
+      col.appendChild(card);
+    });
+  });
+}
+document.querySelectorAll(".board-col").forEach(function (col) {
+  col.addEventListener("dragover", function (e) { e.preventDefault(); col.classList.add("drag-over"); });
+  col.addEventListener("dragleave", function () { col.classList.remove("drag-over"); });
+  col.addEventListener("drop", function (e) {
+    e.preventDefault(); col.classList.remove("drag-over");
+    var t = baseTask(e.dataTransfer.getData("text/plain")); if (!t) return;
+    t.status = col.getAttribute("data-status");
+    if (t.status === "done") toast(tr("Done. That counts."));
+    save(); renderProgress(); refreshAll();
+  });
+});
+/* Dragging a day-list row onto a DayTicker day moves the task to that day.
+   Both live in the Calendar panel, so the drag never crosses panels. */
+$("dayList").addEventListener("dragstart", function (e) {
+  var row = e.target.closest ? e.target.closest(".task-row") : null;
+  if (!row) return;
+  row.classList.add("dragging");
+  e.dataTransfer.setData("text/plain", JSON.stringify({ id: row.getAttribute("data-id"), date: row.getAttribute("data-date") }));
+});
+$("dayList").addEventListener("dragend", function () {
+  $("dayList").querySelectorAll(".dragging").forEach(function (r) { r.classList.remove("dragging"); });
+});
+$("ticker").addEventListener("dragover", function (e) { e.preventDefault(); });
+$("ticker").addEventListener("drop", function (e) {
+  var raw = e.dataTransfer.getData("text/plain");
+  if (!raw) return;
+  var info; try { info = JSON.parse(raw); } catch (err) { return; }
+  var cell = e.target.closest ? e.target.closest("[data-date]") : null;
+  if (!cell || !info.id) return;
+  var t = baseTask(info.id); if (!t) return;
+  e.preventDefault();
+  moveInstance(t, info.date, cell.getAttribute("data-date"));
+  save(); refreshAll(); toast(tr("Moved. The day re-shaped itself."));
+});
+
+/* ---------- settings ---------- */
+function bindSettings() {
+  var s = state.settings;
+  $("checkinTime").value = s.checkinTime;
+  $("nameLow").value = s.names.low; $("nameSteady").value = s.names.steady; $("nameFull").value = s.names.full;
+  $("nCheckin").checked = s.notif.checkin; $("nStart").checked = s.notif.start;
+  $("nSetup").value = s.notif.setup; $("nDigest").checked = s.notif.digest;
+  $("nDigestTimes").value = s.notif.digestTimes.join(", ");
+  $("nDone").checked = s.notif.done; $("nDoneTime").value = s.notif.doneTime;
+  renderNotifStatus();
+}
+function readSettings() {
+  var s = state.settings;
+  s.checkinTime = $("checkinTime").value || "08:00";
+  s.names.low = $("nameLow").value.trim() || "Low";
+  s.names.steady = $("nameSteady").value.trim() || "Steady";
+  s.names.full = $("nameFull").value.trim() || "Full";
+  s.notif.checkin = $("nCheckin").checked; s.notif.start = $("nStart").checked;
+  s.notif.setup = Math.max(0, Math.min(60, +$("nSetup").value || 5));
+  s.notif.digest = $("nDigest").checked;
+  s.notif.digestTimes = $("nDigestTimes").value.split(",").map(validClock).filter(Boolean);
+  if (!s.notif.digestTimes.length) s.notif.digestTimes = ["12:30"];
+  s.notif.done = $("nDone").checked; s.notif.doneTime = $("nDoneTime").value || "20:00";
+  /* Show what was actually kept, so a fixed time is never a silent change. */
+  $("nDigestTimes").value = s.notif.digestTimes.join(", ");
+  save(); renderCheckin();
+}
+["checkinTime", "nameLow", "nameSteady", "nameFull", "nCheckin", "nStart", "nSetup", "nDigest", "nDigestTimes", "nDone", "nDoneTime"].forEach(function (id) {
+  $(id).addEventListener("change", readSettings);
+});
+$("clearSamples").addEventListener("click", function () {
+  var samples = []; state.tasks.forEach(function (t, i) { if (t.source === "sample") samples.push([t, i]); });
+  state.tasks = state.tasks.filter(function (t) { return t.source !== "sample"; });
+  save(); refreshAll();
+  toast(tr("Sample tasks removed. This is fully yours now."), samples.length ? function () { samples.forEach(function (p) { restoreAt(state.tasks, p[0], p[1]); }); save(); refreshAll(); toast(tr("Back again.")); } : undefined);
+});
+
+/* ---------- native notifications bridge ----------
+   Inside the store wrap, the same gentle moments are scheduled ON
+   the device with Capacitor LocalNotifications (the shape of record,
+   Fit's Tranche A-4): the OS fires them even when the app is closed —
+   no server, nothing leaves the phone. On the web there is no
+   plugin: the plan is a no-op and the browser machinery below
+   carries the moments while the app is open, exactly as before.
+   Every save replans (cancel the old set, schedule the new), so a
+   check-in, a pause, or a settings change rewrites the plan at once.
+   A failure here must never break a save: every call is fenced. */
+var PaceRemind = (function () {
+  var timer = null;
+  function plugin() {
+    try { return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) || null; }
+    catch (e) { return null; }
+  }
+  function nid(kind, ref, key) {
+    var s = kind + "|" + ref + "|" + key, h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return 1000 + (h % 2000000000);
+  }
+  function atMs(dayKey, hhmm) { var p = dayKey.split("-"), t = String(hhmm).split(":"); return new Date(+p[0], +p[1] - 1, +p[2], +t[0], +t[1], 0, 0).getTime(); }
+  function planDay(dayKey, floor) {
+    var s = state.settings, n = s.notif, out = [];
+    if (s.pausedDate === dayKey) return out;
+    var ad = adaptedFor(dayKey);
+    function push(kind, ref, hhmm, title, body, taskId) {
+      var at = atMs(dayKey, hhmm);
+      // The tap payload rides every reminder (HQ ruling: a tap
+      // routes to the task) — the task id for start nudges, the
+      // day alone for the day-shaped moments.
+      if (at > floor) out.push({ id: nid(kind, ref, dayKey), title: title, body: body, at: at, extra: { paceKind: kind, paceTask: taskId || "", paceDate: dayKey } });
+    }
+    if (n.checkin && (dayKey !== L.todayKey() || !state.feelings[dayKey]))
+      push("checkin", "day", s.checkinTime, tr("How are you feeling today?"), tr("One tap sets the shape of your day."));
+    if (n.start) ad.visible.forEach(function (t) {
+      if (!t.time) return;
+      push("start", String(t.id), L.nudgeTime(t, n.setup), tr("Time to start: {title}", { title: (t.displayTitle || t.title) }), tr("First step: {step} · about {n} min.", { step: L.nextStepText(t), n: t.durationMin }), String(t.id));
+    });
+    if (n.digest) n.digestTimes.forEach(function (hhmm) {
+      push("digest", hhmm, hhmm, tr("Your day, gently"), L.digestText(ad.visible));
+    });
+    if (n.done && dayKey === L.todayKey() && ad.done.length)
+      push("done", "day", n.doneTime, tr("Today, done"), tr(ad.done.length === 1 ? "{n} thing done today. The rest is parked for tomorrow." : "{n} things done today. The rest is parked for tomorrow.", { n: ad.done.length }));
+    return out;
+  }
+  function run() {
+    var P = plugin(); if (!P) return;
+    try {
+      var old = [];
+      try { old = JSON.parse(localStorage.getItem("pace-remind-ids") || "[]"); } catch (e) {}
+      if (old.length) P.cancel({ notifications: old.map(function (id) { return { id: id }; }) }).catch(function () {});
+      var notes = [];
+      if (state.settings.notif.perm === "granted") {
+        var floor = Date.now() + 30000, tk = L.todayKey(), tm = new Date(); tm.setDate(tm.getDate() + 1);
+        var mk = tm.getFullYear() + "-" + L.pad(tm.getMonth() + 1) + "-" + L.pad(tm.getDate());
+        notes = planDay(tk, floor).concat(planDay(mk, floor));
+      }
+      try { localStorage.setItem("pace-remind-ids", JSON.stringify(notes.map(function (x) { return x.id; }))); } catch (e) {}
+      if (notes.length) P.schedule({ notifications: notes.map(function (x) { return { id: x.id, title: x.title, body: x.body, schedule: { at: new Date(x.at) }, extra: x.extra }; }) }).catch(function () {});
+    } catch (e) {}
+  }
+  function sync() { if (!plugin()) return; if (timer) clearTimeout(timer); timer = setTimeout(run, 400); }
+  return { sync: sync, plugin: plugin, nid: nid, available: function () { return !!plugin(); } };
+})();
+
+/* ---------- notifications ---------- */
+function renderNotifStatus() {
+  var n = state.settings.notif;
+  if (PaceRemind.available()) {
+    $("notifStatus").textContent =
+      n.perm === "granted" ? tr("Notifications are on. You choose what they say and when.") :
+      n.perm === "denied" ? tr("Notifications are blocked. You can allow them in your phone's settings for Pace.") :
+      tr("Notifications are off.");
+    /* PACE-007: the static hint line is web truth only — in the phone
+       app the reminders are scheduled on the device and ring while
+       the app is closed. */
+    $("notifHint").textContent = tr("Reminders are set on this phone, so they can ring even when the app is closed.");
+    return;
+  }
+  $("notifHint").textContent = tr("Reminders fire while the app is open.");
+  $("notifStatus").textContent = !("Notification" in window) ? tr("This browser does not offer notifications.") :
+    n.perm === "granted" ? tr("Notifications are on. You choose what they say and when.") :
+    n.perm === "denied" ? tr("Notifications are blocked in the browser. You can allow them in the browser site settings.") :
+    tr("Notifications are off.");
+}
+function notify(title, body, key, tap) {
+  if (state.sent[key]) return;
+  state.sent[key] = 1; save();
+  var data = tap || {};
+  function fire() {
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then(function (reg) { if (reg.showNotification) reg.showNotification(title, { body: body, icon: "icon.svg", data: data }); else attachTap(new Notification(title, { body: body, icon: "icon.svg" }), data); }).catch(function () { attachTap(new Notification(title, { body: body }), data); });
+      } else attachTap(new Notification(title, { body: body }), data);
+    } catch (e) {}
+  }
+  fire();
+}
+function attachTap(n, data) { try { n.onclick = function () { try { window.focus(); } catch (e) {} routeNotifTap(data); }; } catch (e) {} return n; }
+
+/* ---------- notification tap -> the task (HQ ruling) ----------
+   A reminder exists so the user can act on that task; a tap that
+   only opens the app to its home state is a dead end for the exact
+   moment the reminder was for. routeNotifTap lands on the task's
+   day with the task open; the floor is the right DAY, never a
+   bare home open. Payload: { task, date } — task empty for the
+   day-shaped moments (check-in, digest, done, test). */
+var pendingNotifTap = null;
+function routeNotifTap(p) {
+  p = p || {};
+  var t = p.task ? baseTask(String(p.task)) : null;
+  var dayKey = (t && t.date) || p.date || L.todayKey();
+  try {
+    var dayBtn = document.querySelector('.segmented button[data-view="timeGridDay"]');
+    if (dayBtn) dayBtn.click();
+    selectDate(dayKey, true);
+    if (t) openTask(t.id, dayKey);
+  } catch (e) {}
+}
+function queueNotifTap(p) {
+  pendingNotifTap = p || {};
+  setTimeout(function () { if (pendingNotifTap) { var q = pendingNotifTap; pendingNotifTap = null; routeNotifTap(q); } }, 350);
+}
+function requestNotif() {
+  var P = PaceRemind.plugin();
+  if (P) {
+    P.requestPermissions().then(function (res) {
+      state.settings.notif.perm = res && res.display === "granted" ? "granted" : "denied";
+      save(); renderNotifStatus();
+      toast(state.settings.notif.perm === "granted" ? tr("Notifications on. Gentle ones, chosen by you.") : tr("No problem. The app still works fully without them."));
+    }).catch(function () { toast(tr("No problem. The app still works fully without them.")); });
+    return;
+  }
+  if (!("Notification" in window)) { toast(tr("This browser does not offer notifications.")); return; }
+  Notification.requestPermission().then(function (p) {
+    state.settings.notif.perm = p; save(); renderNotifStatus();
+    if (p === "granted") toast(tr("Notifications on. Gentle ones, chosen by you."));
+    else toast(tr("No problem. The app still works fully without them."));
+  });
+}
+$("notifEnable").addEventListener("click", requestNotif);
+$("notifTest").addEventListener("click", function () {
+  var P = PaceRemind.plugin();
+  if (P) {
+    if (state.settings.notif.perm !== "granted") { toast(tr("Turn notifications on first, then the test can arrive.")); return; }
+    try { P.schedule({ notifications: [{ id: PaceRemind.nid("test", "pace", "test"), title: "Pace", body: tr("This is your test. Gentle, like the real ones."), schedule: { at: new Date(Date.now() + 3000) }, extra: { paceKind: "test", paceTask: "", paceDate: L.todayKey() } }] }).catch(function () {}); } catch (e) {}
+    return;
+  }
+  if (!("Notification" in window)) { toast(tr("This browser does not offer notifications.")); return; }
+  if (Notification.permission !== "granted") { toast(tr("Turn notifications on first, then the test can arrive.")); return; }
+  try { new Notification("Pace", { body: tr("This is your test. Gentle, like the real ones.") }); } catch (e) {}
+});
+$("notifPause").addEventListener("click", function () {
+  state.settings.pausedDate = L.todayKey(); save(); toast(tr("Paused for today. Silence is a fine choice."));
+});
+function checkNotifications() {
+  if (PaceRemind.available()) return; /* native: the device plan carries the moments */
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  var s = state.settings, today = L.todayKey();
+  if (s.pausedDate === today) return;
+  var now = new Date(), hhmm = L.pad(now.getHours()) + ":" + L.pad(now.getMinutes());
+  var n = s.notif;
+  if (n.checkin && hhmm === s.checkinTime && !state.feelings[today]) {
+    notify(tr("How are you feeling today?"), tr("One tap sets the shape of your day."), "checkin-" + today, { task: "", date: today });
+  }
+  var ad = adaptedFor(today);
+  if (n.start) {
+    ad.visible.forEach(function (t) {
+      if (!t.time) return;
+      if (L.nudgeTime(t, n.setup) === hhmm) {
+        notify(tr("Time to start: {title}", { title: (t.displayTitle || t.title) }), tr("First step: {step} · about {n} min.", { step: L.nextStepText(t), n: t.durationMin }), "start-" + t.id + "-" + today, { task: String(t.id), date: today });
+      }
+    });
+  }
+  if (n.digest && n.digestTimes.indexOf(hhmm) !== -1) {
+    notify(tr("Your day, gently"), L.digestText(ad.visible), "digest-" + today + "-" + hhmm, { task: "", date: today });
+  }
+  if (n.done && hhmm === n.doneTime && ad.done.length) {
+    notify(tr("Today, done"), tr(ad.done.length === 1 ? "{n} thing done today. The rest is parked for tomorrow." : "{n} things done today. The rest is parked for tomorrow.", { n: ad.done.length }), "done-" + today, { task: "", date: today });
+  }
+}
+setInterval(checkNotifications, 30000);
+/* Tap entries: the service worker's notificationclick posts the
+   payload (or opens the app with it in the address); a packaged
+   cold start can also carry it the same way. */
+try {
+  var nqs = new URLSearchParams(location.search);
+  if (nqs.get("paceTask") || nqs.get("paceDay")) queueNotifTap({ task: nqs.get("paceTask") || "", date: nqs.get("paceDay") || "" });
+} catch (e) {}
+if (navigator.serviceWorker) { try { navigator.serviceWorker.addEventListener("message", function (ev) { if (ev.data && ev.data.paceTap) queueNotifTap(ev.data.paceTap); }); } catch (e) {} }
+/* Native boot: mirror the device's real permission, then plan. */
+if (PaceRemind.available()) {
+  try {
+    PaceRemind.plugin().addListener("localNotificationActionPerformed", function (ev) {
+      var x = ev && ev.notification && ev.notification.extra;
+      queueNotifTap(x ? { task: x.paceTask || "", date: x.paceDate || "" } : null);
+    });
+  } catch (e) {}
+  PaceRemind.plugin().checkPermissions().then(function (res) {
+    if (res) state.settings.notif.perm = res.display === "granted" ? "granted" : (res.display === "denied" ? "denied" : state.settings.notif.perm);
+    renderNotifStatus(); PaceRemind.sync();
+  }).catch(function () { PaceRemind.sync(); });
+}
+
+/* ---------- welcome ---------- */
+if (!state.welcomed) {
+  // Address the user by their own name when the profile
+  // carries one (asked at sign-up; theirs alone).
+  var wn = (state.settings.profileName || "").trim().split(/\s+/)[0];
+  if (wn) $("welcomeTitle").textContent = tr("Welcome to Pace Calendar, {name}", { name: wn });
+  $("welcome").hidden = false;
+}
+$("welcomeSkip").addEventListener("click", function () { state.welcomed = true; save(); $("welcome").hidden = true; maybeGuide(); });
+$("welcomeNotif").addEventListener("click", function () { state.welcomed = true; save(); $("welcome").hidden = true; requestNotif(); maybeGuide(); });
+
+/* ---------- Skip the Ferry: the setup guide (Lab spec GUIDE-MASCOTS-001) ----------
+   One SVG master, four poses as prop/transform changes. Bubbles max 6 words.
+   Closing never blocks; the guide reopens from Settings. Skip waits at the
+   empty-state dock only, never on a working day. */
+function skipSvg(pose) {
+  /* Skip's guide art of record (variant B composition, finished as vector
+     14 Oct 2026): full ferry, the calendar smaller inside him as his
+     cabin, board palette. Poses are prop/transform changes on one master. */
+  var ink = "#21392E", hull = "#5B6BD5", cream = "#FAF4E4", flagGreen = "#2F7D4F", dotGreen = "#35704E", apricot = "#F0A868", wave = "#AEB8EC";
+  var flagRot = pose === "point" ? "14" : pose === "goodbye" ? "-12" : "0";
+  var flag = '<g transform="rotate(' + flagRot + ' 120 30)"><line x1="120" y1="8" x2="120" y2="48" stroke="' + ink + '" stroke-width="6.5" stroke-linecap="round"/><path d="M120 10 L149 19.5 L120 29 Z" fill="' + flagGreen + '"/></g>';
+  var spray = pose === "celebrate" ? '<path d="M27 103 q-9 -9 -17 -7 M29 115 q-10 -3 -15 3" fill="none" stroke="' + apricot + '" stroke-width="5" stroke-linecap="round"/>' : "";
+  var trail = pose === "goodbye" ? '<path d="M2 172 q8 -8 16 0 q8 8 16 0" fill="none" stroke="' + wave + '" stroke-width="5" stroke-linecap="round" opacity="0.55"/>' : "";
+  var tilt = pose === "celebrate" ? ' transform="rotate(2 120 110)"' : pose === "point" ? ' transform="rotate(-2 120 110)"' : "";
+  return '<svg viewBox="0 0 240 196" class="skip-svg" aria-hidden="true"><g' + tilt + '>' + spray +
+    '<path d="M22 118 H218 L186 164 H54 Z" fill="' + hull + '" stroke="' + ink + '" stroke-width="7" stroke-linejoin="round"/>' +
+    '<rect x="80" y="46" width="80" height="78" rx="13" fill="' + cream + '" stroke="' + ink + '" stroke-width="7"/>' +
+    '<circle cx="98" cy="40" r="8" fill="none" stroke="' + ink + '" stroke-width="6"/>' +
+    '<circle cx="142" cy="40" r="8" fill="none" stroke="' + ink + '" stroke-width="6"/>' +
+    '<circle cx="102" cy="64" r="4.5" fill="' + dotGreen + '"/><circle cx="120" cy="64" r="4.5" fill="' + dotGreen + '"/><circle cx="138" cy="64" r="4.5" fill="' + apricot + '"/>' +
+    '<circle cx="108" cy="88" r="6.8" fill="' + ink + '"/><circle cx="132" cy="88" r="6.8" fill="' + ink + '"/>' +
+    '<circle cx="105.8" cy="85.8" r="2.1" fill="#fff"/><circle cx="129.8" cy="85.8" r="2.1" fill="#fff"/>' +
+    '<circle cx="93" cy="98" r="4.6" fill="' + apricot + '" opacity="0.55"/><circle cx="147" cy="98" r="4.6" fill="' + apricot + '" opacity="0.55"/>' +
+    '<path d="M108 99 q12 10 24 0" fill="none" stroke="' + ink + '" stroke-width="5" stroke-linecap="round"/>' + flag + '</g>' + trail +
+    '<path d="M16 182 q16 -12 32 0 t32 0 t32 0 t32 0 t32 0 t32 0" fill="none" stroke="' + wave + '" stroke-width="8" stroke-linecap="round"/></svg>';
+}
+var GUIDE_STEPS = [
+  { pose: "welcome", bubble: "We cross at your pace.", next: "Next" },
+  { pose: "welcome", bubble: "This calendar helps people that are overwhelmed, or with ADHD and problems getting things done.", next: "Next" },
+  { pose: "point", bubble: "Pick a look you like.", next: "Next", themes: true },
+  { pose: "celebrate", bubble: "Add one small thing.", next: "Done ✓", last: true }
+];
+/* THE TOUR (v4 shape): Skip's pop-up tours the app from the
+   middle of the screen. Step 1 asks the NAME when the
+   account has none (there is no separate name moment); then
+   the menu stop (the card docks beside the open menu); then
+   the app's areas; last stop Done. The X or "Skip tour"
+   closes it any time; it runs on the first visit only. */
+function tourNeedsName() { return !!(ACTIVE_UID && FB.configured && !(state.settings.profileName || "").trim()); }
+var TOUR = [];
+function buildTour() {
+  TOUR = [];
+  if (tourNeedsName()) TOUR.push({ kind: "name", pose: "welcome", bubble: "Ahoy! I'm Skip. Welcome aboard! What's your name?", next: "Next" });
+  TOUR.push({ kind: "step", pose: GUIDE_STEPS[0].pose, bubble: GUIDE_STEPS[0].bubble, next: "Next" });
+  TOUR.push({ kind: "menu", pose: "point", bubble: "This is your menu — everything lives here.", next: "Next" });
+  for (var i = 1; i < GUIDE_STEPS.length; i++) TOUR.push(Object.assign({ kind: "step" }, GUIDE_STEPS[i]));
+}
+var guideStep = 0;
+function showGuide(step) {
+  if (!TOUR.length) buildTour();
+  guideStep = step;
+  var s = TOUR[step];
+  $("guideArt").innerHTML = skipSvg(s.pose);
+  $("guideBubble").textContent = tr(s.bubble);
+  $("guideNext").textContent = tr(s.next);
+  $("guideImport").hidden = !s.last || DEMO_SESSION;
+  $("guideDots").innerHTML = TOUR.map(function (_, i) { return '<span class="g-dot' + (i === step ? " is-on" : "") + '"></span>'; }).join("");
+  // The menu stop: open the menu and dock the card beside it.
+  var sheet = $("guideSheet");
+  if (s.kind === "menu") {
+    document.documentElement.removeAttribute("data-sb");
+    sheet.setAttribute("data-dock", "menu");
+  } else {
+    sheet.removeAttribute("data-dock");
+    applySidebar();
+  }
+  var ex = $("guideExtra");
+  if (s.kind === "name") {
+    ex.innerHTML = '<input type="text" id="tourName" class="tour-name-input" autocomplete="name" placeholder="' + tr("Your name") + '" aria-label="' + tr("Your name") + '">';
+  } else if (s.themes) {
+    /* The guide offers a curated set of looks (the photo modes are
+       not picks; Brand joined the set with Law E). */
+    var GUIDE_THEMES = ["white", "dark", "blush", "sky", "mint", "lavender", "brand"];
+    ex.innerHTML = '<div class="guide-swatches">' + GUIDE_THEMES.map(function (t) {
+      return '<button class="g-swatch" data-g-theme="' + t + '" style="background:' + THEME_COLORS[t] + '" aria-label="' + t + ' theme"></button>';
+    }).join("") + "</div>";
+    ex.querySelectorAll("[data-g-theme]").forEach(function (b) {
+      b.addEventListener("click", function () { var t = b.getAttribute("data-g-theme"); state.settings.appearance.theme = t; state.settings.appearance.bgChoice = "theme"; save(); applyAppearance(); if (t !== "white" && t !== "dark") maybePlus("look"); });
+    });
+  } else ex.innerHTML = "";
+  $("guideSheet").hidden = false;
+}
+/* The name re-ask bookkeeping (HQ ruling): a name step left
+   unanswered earns ONE gentle re-offer on the NEXT visit —
+   never the same session, never a third time. "Visit" is a
+   page load: BOOT_T stamps this load, and a skip recorded
+   under an earlier stamp is what unlocks the re-offer. */
+var BOOT_T = Date.now();
+function noteNameSkip() {
+  if (!tourNeedsName()) return;
+  if (!TOUR.some(function (s) { return s.kind === "name"; })) return;
+  try { localStorage.setItem("pace-name-skip", (ACTIVE_UID || "") + ":" + BOOT_T); } catch (e) {}
+}
+function closeGuide() {
+  noteNameSkip();
+  $("guideSheet").hidden = true;
+  $("guideSheet").removeAttribute("data-dock");
+  applySidebar();
+  TOUR = [];
+  if (!state.settings.guideDone) { state.settings.guideDone = true; save(); toast(tr("See you at the dock.")); }
+}
+function maybeGuide() { if (!state.settings.guideDone) { buildTour(); showGuide(0); } }
+$("guideClose").addEventListener("click", closeGuide);
+$("guideSkip").addEventListener("click", closeGuide);
+$("guideNext").addEventListener("click", function () {
+  var s = TOUR[guideStep];
+  if (!s) return;
+  if (s.kind === "name") {
+    // The tour's first stop IS the name ask: Next carries
+    // whatever is typed onto the profile (empty = skipped
+    // in the moment; Settings keeps the name row forever).
+    var inp = $("tourName");
+    var nm = inp ? inp.value.trim().slice(0, 60) : "";
+    if (nm) {
+      state.settings.profileName = nm; save(); renderAccount();
+      toast(tr("Hi {name} — you're in.", { name: nm.split(/\s+/)[0] }));
+    }
+  }
+  if (s.last || guideStep >= TOUR.length - 1) closeGuide();
+  else showGuide(guideStep + 1);
+});
+$("guideAgain").addEventListener("click", function () { TOUR = []; buildTour(); showGuide(0); });
+
+/* ---------- the upgrade moment ---------- */
+/* Fires ONLY on a paid-edge tap (a Plus look, Cute mode,
+   Talk to it) — never on open, never twice for the same
+   edge in one visit. It invites to Plans; it never charges
+   and never locks: the tapped thing works exactly as today,
+   popup or no popup. (Pace has no repeat picker — repeats
+   arrive through Talk to it, already an edge, and through
+   import, a completed flow with no wanting-moment.) */
+var plusShown = {}, plusEntries = {};
+function maybePlus(edge) {
+  if (DEMO_SESSION || plusShown[edge]) return;
+  /* PACE-002 (HQ ruling): the FIRST entry to an edge lands clean —
+     the first minute belongs to the feature. The edge speaks on a
+     repeat visit, still at most once per visit. */
+  plusEntries[edge] = (plusEntries[edge] || 0) + 1;
+  if (plusEntries[edge] < 2) return;
+  plusShown[edge] = 1;
+  $("plusArt").innerHTML = skipSvg("welcome");
+  $("plusSheet").hidden = false;
+}
+function closePlus() { $("plusSheet").hidden = true; }
+$("plusClose").addEventListener("click", closePlus);
+$("plusNotNow").addEventListener("click", closePlus);
+$("plusPlans").addEventListener("click", function () { closePlus(); $("plansSheet").hidden = false; });
+$("plansOpen").addEventListener("click", function () { $("plansSheet").hidden = false; });
+$("plansClose").addEventListener("click", function () { $("plansSheet").hidden = true; });
+
+/* ---------- bring my calendar in (shared module: IMPORT-DESIGN.md) ---------- */
+var DEMO_SESSION = /[?&]demo=1\b/.test(location.search) || !!(state.settings && state.settings.demo);
+var IMPORT_GUIDE = {
+  google: "calendar.google.com \u2192 the gear \u2192 Settings \u2192 Import & export \u2192 Export. Inside the download is a file ending .ics. Bring that file here.",
+  apple: "In a browser: iCloud.com \u2192 Calendar \u2192 the share icon by a calendar \u2192 Public Calendar. Open the link it gives you \u2014 a file downloads. Bring that file here.",
+  outlook: "Outlook on the web \u2192 the gear \u2192 Calendar \u2192 Shared calendars \u2192 Publish a calendar. Open the ICS link it gives you \u2014 a file downloads. Bring that file here.",
+  file: "Pick the .ics file your old calendar exported. It is read once, copied in, and the file itself is never changed."
+};
+var IMPORT_LABELS = { google: "Google Calendar", apple: "Apple / iCloud", outlook: "Outlook", file: "a calendar file" };
+var importSource = "google";
+function openImport() { if (DEMO_SESSION) return; $("importResult").textContent = ""; $("importSheet").hidden = false; }
+function shapeToTask(s) {
+  var cat = L.categoryFor(s.title);
+  var words = [s.location, s.notes].filter(Boolean).join(" \u2014 ");
+  return { id: uid(), title: s.title, date: s.date, time: s.time, durationMin: s.durationMin, priority: 0, repeat: s.repeat, category: cat.id, color: cat.color, essential: false, status: "todo", steps: [], minVersion: "", fullVersion: "", source: "import", originalText: words, skipDates: [], doneDates: [], importUid: s.importUid, importKey: s.importKey };
+}
+function runImport(text, label) {
+  var parsed = window.CI.parseICS(text);
+  if (parsed.error || !parsed.events.length) { $("importResult").textContent = tr("That didn\u2019t read as a calendar. Nothing was brought in."); return; }
+  var plan = window.CI.planImport(parsed, state.tasks, { sourceLabel: label });
+  var res = window.CI.applyImport(state, plan, label, shapeToTask);
+  save(); refreshAll();
+  if (res.added > 0) {
+    markActivated("import");
+    if (ACTIVE_UID && FB.configured) {
+      var totalEv = (state.imports || []).reduce(function (a, r) { return a + (r.count || 0); }, 0);
+      FB.fsSet("aggImports/" + ACTIVE_UID, { events: totalEv, imports: (state.imports || []).length, at: new Date().toISOString() }).catch(function () {});
+    }
+  }
+  var bits = [res.added + (res.added === 1 ? " event" : " events") + " brought in"];
+  if (res.liveRepeats) bits.push(res.liveRepeats + " repeating");
+  if (res.dupes) bits.push(res.dupes + " already here");
+  if (res.skipped) bits.push(res.skipped + " couldn\u2019t be read");
+  $("importResult").textContent = bits.join(" \u00B7 ") + ".";
+  toast(res.added ? tr("Calendar brought in.") : tr("Nothing new to bring in."));
+}
+if (DEMO_SESSION) { $("importBtn").hidden = true; $("importOpen2").hidden = true; }
+$("importBtn").addEventListener("click", openImport);
+$("importOpen2").addEventListener("click", openImport);
+$("guideImport").addEventListener("click", function () { closeGuide(); openImport(); });
+$("importClose").addEventListener("click", function () { $("importSheet").hidden = true; });
+document.querySelectorAll(".import-src").forEach(function (b) {
+  b.addEventListener("click", function () {
+    importSource = b.getAttribute("data-src");
+    document.querySelectorAll(".import-src").forEach(function (x) { x.classList.toggle("is-active", x === b); });
+    $("importGuide").textContent = tr(IMPORT_GUIDE[importSource]);
+  });
+});
+/* One import path only: the file. A pasted-link fetch stood here until
+   18 Oct — it could never work (calendar hosts send no CORS headers, so
+   the platform blocks the read; iCloud links are webcal://, which fetch
+   cannot open), exactly as a real phone report showed. The link field,
+   its button and the fetch are gone; the file is the path. */
+$("importFileBtn").addEventListener("click", function () { $("importFile").click(); });
+$("importFile").addEventListener("change", function () {
+  var f = $("importFile").files && $("importFile").files[0];
+  if (!f) return;
+  var rd = new FileReader();
+  rd.onload = function () { runImport(String(rd.result || ""), importSource === "file" ? "a calendar file" : IMPORT_LABELS[importSource]); };
+  rd.onerror = function () { $("importResult").textContent = tr("That file couldn\u2019t be read."); };
+  rd.readAsText(f);
+  $("importFile").value = "";
+});
+if (state.welcomed && !state.settings.guideDone) maybeGuide();
+
+/* ---------- accounts (the accounts wave) ----------
+   Guest mode is forever: everything below is inert unless the
+   Firebase config has landed AND a session exists. The spine is
+   the contracts' light record (createdAt / lastActiveAt / plan /
+   activatedAt) — the state itself lives at users/{uid}/data/state
+   as one JSON string, so count-only readers (the CEO dashboard)
+   can never reach a state payload. */
+var spine = null;
+var syncTimer = null;
+var syncBusy = false;
+function spinePath() { return "users/" + ACTIVE_UID; }
+function statePath() { return "users/" + ACTIVE_UID + "/data/state"; }
+function scheduleSync() {
+  if (!ACTIVE_UID || !FB.configured) return;
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(syncNow, 1200);
+}
+var DELETING = false;
+function syncNow() {
+  if (!ACTIVE_UID || !FB.configured || syncBusy || DELETING) return;
+  syncBusy = true;
+  var payload = JSON.stringify(state);
+  FB.fsSet(statePath(), { stateJson: payload, updatedAt: new Date().toISOString() })
+    .then(function () { syncBusy = false; }, function () { syncBusy = false; });
+  var note = $("accountNote");
+  if (note && payload.length > 800000) note.textContent = tr("Your saved calendar is getting large ({kb} KB). It still fits — a tidy-up option is coming before it ever matters.", { kb: Math.round(payload.length / 1000) });
+}
+function spineTouchDaily() {
+  if (!spine) return;
+  var today = new Date().toISOString().slice(0, 10);
+  if (String(spine.lastActiveAt || "").slice(0, 10) === today) return;
+  spine.lastActiveAt = new Date().toISOString();
+  FB.fsSet(spinePath(), { lastActiveAt: spine.lastActiveAt }, ["lastActiveAt"]).catch(function () {});
+}
+function markActivated(kind) {
+  if (!ACTIVE_UID || !FB.configured || !spine || spine.activatedAt) return;
+  spine.activatedAt = new Date().toISOString();
+  spine.activationKind = kind;
+  FB.fsSet(spinePath(), { activatedAt: spine.activatedAt, activationKind: kind }, ["activatedAt", "activationKind"]).catch(function () {});
+  FB.fsSet("aggSignups/" + ACTIVE_UID, { activatedAt: spine.activatedAt, activationKind: kind }, ["activatedAt", "activationKind"]).catch(function () {});
+}
+function guestPot() {
+  try {
+    var g = JSON.parse(localStorage.getItem(STORE + ":guest") || "null");
+    if (!g) return null;
+    // The pot is the guest's OWN things. The app's factory samples
+    // (source "sample") are not user data — a samples-only slot is
+    // no pot, or the next account would be offered the demo set.
+    var n = (g.tasks || []).filter(function (t) { return t && t.source !== "sample"; }).length
+      + (g.todos || []).length + (g.habits || []).length;
+    return n > 0 ? g : null;
+  } catch (e) { return null; }
+}
+function adoptStateObject(obj) {
+  try { localStorage.setItem(storeKey(), JSON.stringify(obj)); } catch (e) {}
+  var fresh = load();
+  if (fresh) { state = fresh; save(); applyAppearance(); refreshAll(); renderTitle(); }
+}
+function reconcileAccount() {
+  if (!ACTIVE_UID || !FB.configured) return;
+  FB.fsGet(spinePath()).then(function (sp) {
+    if (!sp) {
+      spine = { createdAt: new Date().toISOString(), lastActiveAt: new Date().toISOString(), deletedByUser: false };
+      // No plan on the user record — entitlement lives at _comp
+      // alone. The aggregate shard (owner space) is the only
+      // outward fact: this account exists, and when it arrived.
+      FB.fsSet("aggSignups/" + ACTIVE_UID, { createdAt: spine.createdAt }).catch(function () {});
+      return FB.fsSet(spinePath(), spine).then(function () { return null; });
+    }
+    spine = sp; return null;
+  }).then(function () {
+    spineTouchDaily();
+    return FB.fsGet(statePath());
+  }).then(function (doc) {
+    renderAccount();
+    if (doc && typeof doc.stateJson === "string") {
+      var serverAt = Date.parse(doc.updatedAt || "") || 0;
+      var localAt = (state && state.updatedAt) || 0;
+      if (serverAt > localAt) {
+        try { adoptStateObject(JSON.parse(doc.stateJson)); } catch (e) {}
+      }
+      renderAccount();
+    }
+    // The door is decided HERE, after any adoption — and by
+    // CONTENT, not by the state doc's existence: a fresh
+    // account's own first sync writes its (empty) state doc
+    // while this reconcile is still fetching, so "no doc" is a
+    // race the door loses on real networks (live-caught on the
+    // twin journey: the door never fired, mock always won).
+    adoptPendingName();
+    maybeJoinDoor();
+  }).catch(function () { renderAccount(); });
+}
+/* Door-first joining, v4: after the door the user is inside
+   the app and Skip's TOUR asks the name as its first stop.
+   Left unanswered, the name earns exactly ONE gentle
+   re-offer on the next visit (HQ's re-ask ruling — see
+   maybeJoinDoor + noteNameSkip), then never again; the
+   name also lives in Settings forever. The pot door
+   follows either way. */
+function maybeJoinDoor() {
+  if (!ACTIVE_UID || state.settings.profileName) { maybePotDoor(); return; }
+  if (!state.settings.guideDone) { maybePotDoor(); return; } // the coming tour asks it
+  // THE GENTLE RE-OFFER (HQ ruling): once, on a later visit
+  // than the skip — never the same session, never again
+  // after. An account never asked at all (its tour predates
+  // the name step) gets this as its first ask.
+  try {
+    if (localStorage.getItem("pace-name-reoffered") === ACTIVE_UID) { maybePotDoor(); return; }
+    var sk = (localStorage.getItem("pace-name-skip") || "").split(":");
+    if (sk[0] === ACTIVE_UID && !(Number(sk[1]) < BOOT_T)) { maybePotDoor(); return; } // skipped this very visit
+    localStorage.setItem("pace-name-reoffered", ACTIVE_UID);
+  } catch (e) { maybePotDoor(); return; }
+  TOUR = [{ kind: "name", pose: "welcome", bubble: "Ahoy! I'm Skip. What's your name?", next: "Done ✓", last: true }];
+  showGuide(0);
+  maybePotDoor();
+}
+/* The name asked at sign-up (or carried by a Google door)
+   lands on the profile AFTER reconcile settles — adopting it
+   earlier would stamp the local state and could win against
+   a newer server copy (Law B: never hide a user's data). */
+function adoptPendingName() {
+  try {
+    var pn = localStorage.getItem("pace-pending-name");
+    if (!pn) return;
+    localStorage.removeItem("pace-pending-name");
+    if (!ACTIVE_UID || state.settings.profileName) return;
+    state.settings.profileName = String(pn).slice(0, 60);
+    save();
+    var wn = state.settings.profileName.trim().split(/\s+/)[0];
+    if (wn && !$("welcome").hidden) $("welcomeTitle").textContent = "Welcome to Pace Calendar, " + wn;
+    renderAccount();
+  } catch (e) {}
+}
+/* The door's stamps key to the POT'S GENERATION (Security's
+   precision): the same pot is never offered twice, a genuinely
+   new pot may be; the stamps live on this device only, and
+   stamping never touches the pot's data. */
+function potGeneration(pot) {
+  if (!pot) return "";
+  var real = (pot.tasks || []).filter(function (t) { return t && t.source !== "sample"; });
+  var first = (real[0] && real[0].id) || "";
+  return String(pot.updatedAt || "") + ":" + real.length + ":" + first;
+}
+function maybePotDoor() {
+  var pot = guestPot();
+  if (!pot) return;
+  if (localStorage.getItem("pace-pot-offered") === potGeneration(pot)) return;
+  // An account holding real content of its own is never
+  // offered the pot — the door is for empty-handed accounts.
+  var ownReal = (state.tasks || []).some(function (t) { return t && t.source !== "sample"; }) || (state.todos || []).length > 0 || (state.habits || []).length > 0;
+  if (ownReal) return;
+  var n = (pot.tasks || []).length;
+  $("potText").textContent = t(n === 1 ? "This device has a guest calendar on it ({n} event, plus its lists). Bring it into your account, or start fresh — the guest copy stays on the device either way until you say." : "This device has a guest calendar on it ({n} events, plus its lists). Bring it into your account, or start fresh — the guest copy stays on the device either way until you say.", { n: n });
+  $("potSheet").hidden = false;
+}
+function resolvePot(bring) {
+  var pot0 = guestPot();
+  localStorage.setItem("pace-pot-offered", potGeneration(pot0));
+  $("potSheet").hidden = true;
+  if (!bring) { toast(tr("Fresh start. Your guest calendar is still on this device.")); return; }
+  var pot = guestPot();
+  if (!pot) return;
+  adoptStateObject(pot);
+  localStorage.setItem("pace-pot-consumed", potGeneration(pot));
+  try { localStorage.setItem(STORE + ":guest", JSON.stringify(seed())); } catch (e) {}
+  syncNow();
+  toast(tr("Your things are in your account now."));
+}
+function freshAccountState() {
+  var s = seed();
+  s.tasks = []; s.todos = []; s.habits = []; s.feelings = {}; s.imports = [];
+  return s;
+}
+function renderAccount() {
+  var grp = $("accountGroup");
+  if (!grp || !FB.configured) return;
+  grp.hidden = false;
+  var sess = FB.session();
+  var note = $("accountNote");
+  if (ACTIVE_UID && sess) {
+    var myName = (state.settings.profileName || "").trim();
+    var firstName = myName ? myName.split(/\s+/)[0] : "";
+    $("accountLine").textContent = (firstName ? tr("Hi {name} — signed in as {email}. Your calendar saves to your account and this device.", { name: firstName, email: (sess.email || tr("your account")) }) : tr("Signed in as {email}. Your calendar saves to your account and this device.", { email: (sess.email || tr("your account")) }));
+    var pnr = $("profileNameRow"), pni = $("profileName");
+    if (pnr && pni) { pnr.hidden = false; if (document.activeElement !== pni) pni.value = myName; }
+    $("accountOpen").hidden = true; $("accountOut").hidden = false; $("accountDelete").hidden = false;
+    var potNow = guestPot();
+    $("accountBring").hidden = !(potNow && localStorage.getItem("pace-pot-consumed") !== potGeneration(potNow));
+    $("accountUncache").hidden = true;
+    if (note && !note.textContent) note.textContent = "";
+  } else {
+    $("accountLine").textContent = tr("You are using Pace on this device only. Sign in to keep your calendar safe across devices.");
+    $("accountOpen").hidden = false; $("accountOut").hidden = true; $("accountDelete").hidden = true;
+    $("accountBring").hidden = true;
+    var pnr2 = $("profileNameRow"); if (pnr2) pnr2.hidden = true;
+    var lastUid = null;
+    try { lastUid = localStorage.getItem("pace-last-uid"); } catch (e) {}
+    $("accountUncache").hidden = !(lastUid && localStorage.getItem(STORE + ":" + lastUid));
+  }
+}
+/* The native doors (18 Oct, the Caresitters recipe of record): inside
+   the packaged app the web popups cannot complete (Google blocks OAuth
+   in webviews; Apple's web JS likewise), so on native the
+   @capacitor-firebase/authentication plugin runs the OS-level sign-in
+   and hands back a credential; Pace's own REST exchanges
+   (FB.googleSignIn / FB.appleSignIn) own the session from there —
+   skipNativeAuth is set in capacitor.config.json, so the plugin
+   creates no parallel session. On the web this returns null and the
+   doors run exactly as before. */
+function nativeAuthPlugin() {
+  try {
+    var C = window.Capacitor;
+    if (C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.FirebaseAuthentication) return C.Plugins.FirebaseAuthentication;
+  } catch (e) {}
+  return null;
+}
+function openAuth() {
+  if (!FB.configured) return;
+  $("authMsg").textContent = "";
+  $("authMsg1").textContent = "";
+  $("authPass").value = "";
+  $("doorStep1").hidden = false;
+  $("doorStep2").hidden = true;
+  $("appleBtn").hidden = !(window.PACE_FB_CONFIG && window.PACE_FB_CONFIG.appleEnabled) && !nativeAuthPlugin();
+  $("authSheet").hidden = false;
+}
+/* Door messages land on BOTH step lines: only one step is ever
+   visible, and a message written to the hidden step reads as a dead
+   button (PACE-001, found by dogfood on the shipped build 7). */
+function authBusy(msg) { $("authMsg").textContent = msg; $("authMsg1").textContent = msg; }
+function afterSignIn() { try { localStorage.setItem("pace-last-uid", ACTIVE_UID || ""); } catch (e) {} location.reload(); }
+function bindAccounts() {
+  if (!FB.configured) return;
+  renderAccount();
+  var pni = $("profileName");
+  if (pni) pni.addEventListener("change", function () {
+    state.settings.profileName = pni.value.trim().slice(0, 60);
+    save(); renderAccount(); toast(tr("We'll call you {name} here.", { name: (state.settings.profileName.split(/\s+/)[0] || tr("friend")) }));
+  });
+  $("accountOpen").addEventListener("click", openAuth);
+  $("authClose").addEventListener("click", function () { $("authSheet").hidden = true; });
+  // DOOR-FIRST JOINING (the ruling, 15 Oct): the door is only
+  // the door — mark, Google, Apple, email + password, ONE
+  // button. One tap signs a returning user in; if no account
+  // exists for the email, the same tap creates it (under
+  // enumeration protection the two failures read alike, so a
+  // create attempt follows — an EMAIL_EXISTS answer then
+  // means the password was wrong, and says so plainly).
+  // The name is asked on the very next screen, never here.
+  var doDoor = function () {
+    var email = $("authEmail").value.trim(), pw = $("authPass").value;
+    if (!email || !pw) { authBusy(tr("Add your email and password first.")); return; }
+    authBusy(tr("One moment…"));
+    FB.emailSignIn(email, pw).then(function (s) { ACTIVE_UID = s.uid; afterSignIn(); })
+      .catch(function (e) {
+        if (e && (e.code === "EMAIL_NOT_FOUND" || e.code === "INVALID_LOGIN_CREDENTIALS")) {
+          authBusy(tr("Creating your account…"));
+          FB.emailSignUp(email, pw).then(function (s) { ACTIVE_UID = s.uid; afterSignIn(); })
+            .catch(function (e2) {
+              if (e2 && e2.code === "EMAIL_EXISTS") authBusy(tr("That email has an account, but the password does not match it. Try again, or tap Forgot password."));
+              else authBusy(tr(FB.userError(e2)));
+            });
+        } else authBusy(tr(FB.userError(e)));
+      });
+  };
+  $("authGo").addEventListener("click", doDoor);
+  $("authPass").addEventListener("keydown", function (e) { if (e.key === "Enter") doDoor(); });
+  // The door's two steps (the refined shape): the arrow
+  // carries a plausible email to the password step; Change
+  // walks back. Enter on the email does what the arrow does.
+  var doorNext = function () {
+    var email = $("authEmail").value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || "")) { $("authMsg1").textContent = tr("That email address does not look right."); return; }
+    $("authMsg1").textContent = ""; $("authMsg").textContent = "";
+    $("doorEmailEcho").textContent = email;
+    $("doorStep1").hidden = true;
+    $("doorStep2").hidden = false;
+    $("authPass").focus();
+  };
+  $("doorNext").addEventListener("click", doorNext);
+  $("authEmail").addEventListener("keydown", function (e) { if (e.key === "Enter") doorNext(); });
+  $("doorChange").addEventListener("click", function () {
+    $("doorStep2").hidden = true;
+    $("doorStep1").hidden = false;
+    $("authEmail").focus();
+  });
+  $("pwEye").addEventListener("click", function () {
+    var f = $("authPass");
+    f.type = f.type === "password" ? "text" : "password";
+    f.focus();
+  });
+  $("doorBack").addEventListener("click", function () {
+    $("doorStep2").hidden = true;
+    $("doorStep1").hidden = false;
+    $("authEmail").focus();
+  });
+  $("authReset").addEventListener("click", function () {
+    var email = $("authEmail").value.trim();
+    if (!email) { authBusy(tr("Type your email above first, then tap Forgot password.")); return; }
+    FB.sendPasswordReset(email).then(function () { authBusy(tr("Reset email sent. Follow its link, then sign in here.")); })
+      .catch(function (e) { authBusy(tr(FB.userError(e))); });
+  });
+  $("googleBtn").addEventListener("click", function () {
+    var natG = nativeAuthPlugin();
+    if (natG) {
+      authBusy(tr("Opening Google…"));
+      natG.signInWithGoogle().then(function (res) {
+        var tok = res && res.credential && res.credential.idToken;
+        if (!tok) { authBusy(tr("Google sign-in was closed. Nothing changed.")); return; }
+        FB.googleSignIn(tok).then(function (s) { ACTIVE_UID = s.uid; afterSignIn(); })
+          .catch(function (e) { authBusy(tr(FB.userError(e))); });
+      }).catch(function () { authBusy(tr("Google sign-in was closed. Nothing changed.")); });
+      return;
+    }
+    var cid = window.PACE_FB_CONFIG && window.PACE_FB_CONFIG.googleClientId;
+    if (!cid) { authBusy(tr("Google sign-in is not switched on yet. Email + password works now.")); return; }
+    authBusy(tr("Opening Google…"));
+    var go = function () {
+      window.google.accounts.id.initialize({
+        client_id: cid,
+        callback: function (resp) {
+          FB.googleSignIn(resp.credential).then(function (s) { ACTIVE_UID = s.uid; afterSignIn(); })
+            .catch(function (e) { authBusy(tr(FB.userError(e))); });
+        },
+      });
+      window.google.accounts.id.prompt();
+    };
+    if (window.google && window.google.accounts) go();
+    else {
+      var sc = document.createElement("script");
+      sc.src = "https://accounts.google.com/gsi/client";
+      sc.onload = go; sc.onerror = function () { authBusy("Google did not load. Check your connection, or use email + password."); };
+      document.head.appendChild(sc);
+    }
+  });
+  $("appleBtn").addEventListener("click", function () {
+    // The Apple door (wired 17 Oct, behind appleEnabled + the
+    // Services ID the developer sitting creates): Apple's own JS
+    // runs the sign-in popup; the id_token it returns crosses to
+    // Firebase through FB.appleSignIn. While the flag is off the
+    // button is hidden and this handler is unreachable.
+    var natA = nativeAuthPlugin();
+    if (natA) {
+      authBusy(tr("Opening Apple…"));
+      natA.signInWithApple().then(function (res) {
+        var cred = res && res.credential;
+        if (!cred || !cred.idToken) { authBusy(tr("Apple sign-in was closed. Nothing changed.")); return; }
+        try { // The plugin offers the name on first authorisation — carry it for the tour, like the web door.
+          var nmA = res.user && (res.user.displayName || [res.user.name && res.user.name.givenName, res.user.name && res.user.name.familyName].filter(Boolean).join(" "));
+          if (nmA && !localStorage.getItem("pace-pending-name")) localStorage.setItem("pace-pending-name", String(nmA).slice(0, 60));
+        } catch (e) {}
+        FB.appleSignIn(cred.idToken, null, cred.nonce || null).then(function (sess) { ACTIVE_UID = sess.uid; afterSignIn(); })
+          .catch(function (e) { authBusy(tr(FB.userError(e))); });
+      }).catch(function () { authBusy(tr("Apple sign-in was closed. Nothing changed.")); });
+      return;
+    }
+    var cfgA = window.PACE_FB_CONFIG || {};
+    if (!cfgA.appleEnabled || !cfgA.appleClientId) { authBusy(tr("Apple sign-in is not switched on yet. Email + password works now.")); return; }
+    authBusy(tr("Opening Apple…"));
+    var go = function () {
+      try {
+        window.AppleID.auth.init({ clientId: cfgA.appleClientId, scope: "name email", redirectURI: location.origin + location.pathname, state: "pace-door", usePopup: true });
+        window.AppleID.auth.signIn().then(function (res) {
+          try { // Apple offers the name only on the FIRST authorisation — carry it for the tour, like any door name.
+            var nm = res && res.user && res.user.name;
+            if (nm && (nm.firstName || nm.lastName) && !localStorage.getItem("pace-pending-name")) localStorage.setItem("pace-pending-name", [nm.firstName, nm.lastName].filter(Boolean).join(" ").slice(0, 60));
+          } catch (e) {}
+          FB.appleSignIn(res.authorization.id_token).then(function (sess) { ACTIVE_UID = sess.uid; afterSignIn(); })
+            .catch(function (e) { authBusy(tr(FB.userError(e))); });
+        }).catch(function () { authBusy(tr("Apple sign-in was closed. Nothing changed.")); });
+      } catch (e) { authBusy(tr("Apple sign-in was closed. Nothing changed.")); }
+    };
+    if (window.AppleID && window.AppleID.auth) go();
+    else {
+      var sc = document.createElement("script");
+      sc.src = "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js";
+      sc.onload = go; sc.onerror = function () { authBusy(tr("Apple did not load. Check your connection, or use email + password.")); };
+      document.head.appendChild(sc);
+    }
+  });
+  $("accountOut").addEventListener("click", function () {
+    try { localStorage.setItem("pace-last-uid", ACTIVE_UID || ""); } catch (e) {}
+    FB.signOut(); location.reload();
+  });
+  $("accountDownload").addEventListener("click", function () {
+    var json = JSON.stringify(state, null, 2);
+    /* Native: a download anchor does nothing inside the wrap — write
+       the file and offer it through the share sheet instead. */
+    var FS = null, SH = null;
+    try { FS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem; SH = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share; } catch (e) {}
+    if (FS && SH) {
+      FS.writeFile({ path: "pace-calendar-data.json", data: json, directory: "CACHE", encoding: "utf8" })
+        .then(function () { return FS.getUri({ path: "pace-calendar-data.json", directory: "CACHE" }); })
+        .then(function (r) { return SH.share({ title: "Pace Calendar data", url: r.uri }); })
+        .catch(function () { toast(tr("Export did not work. Nothing was changed.")); });
+      return;
+    }
+    var blob = new Blob([json], { type: "application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "pace-calendar-data.json"; a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+  });
+  $("accountBring").addEventListener("click", function () { $("potSheet").hidden = false; var pot = guestPot(); if (pot) $("potText").textContent = tr("Bring this device's guest calendar ({n} events, plus its lists) into your account? It replaces nothing — your account has no saved calendar yet.", { n: (pot.tasks || []).length }); });
+  $("potYes").addEventListener("click", function () { resolvePot(true); });
+  $("potNo").addEventListener("click", function () { resolvePot(false); });
+  $("accountUncache").addEventListener("click", function () {
+    var lastUid = null;
+    try { lastUid = localStorage.getItem("pace-last-uid"); } catch (e) {}
+    if (lastUid) { try { localStorage.removeItem(STORE + ":" + lastUid); } catch (e) {} }
+    toast(tr("Your cached data is off this device. Your account itself is untouched."));
+    renderAccount();
+  });
+  $("accountDelete").addEventListener("click", function () { $("deleteMsg").textContent = ""; $("deleteSheet").hidden = false; });
+  $("deleteCancel").addEventListener("click", function () { $("deleteSheet").hidden = true; });
+  $("deleteGo").addEventListener("click", function () {
+    var pw = $("deletePass").value;
+    var sess = FB.session();
+    if (!sess) return;
+    // Disarm sync FIRST (Quality's held leg, diagnosed): a
+    // debounced save landing mid-sweep would resurrect the
+    // state doc after its delete — the sweep must be the
+    // only writer from here. A failed delete re-arms it.
+    DELETING = true;
+    if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+    $("deleteMsg").textContent = tr("Checking it is you…");
+    FB.emailSignIn(sess.email, pw).then(function () {
+      $("deleteMsg").textContent = tr("Deleting…");
+      // The §6 sweep, in order (Security ruling, rules v2.2):
+      // state → spine → the aggregate shards → the Auth user.
+      // Erasure takes the shard: a uid-keyed row is the user's
+      // data however light its fields. aggSubs stays out — a
+      // payment-path record under its own retention policy.
+      return FB.fsDelete(statePath())
+        .then(function () { return FB.fsDelete(spinePath()); })
+        .then(function () { return FB.fsDelete("aggSignups/" + sess.uid); })
+        .then(function () { return FB.fsDelete("aggImports/" + sess.uid); });
+    }).then(function () { return FB.deleteAccount(); })
+      .then(function () {
+        try { localStorage.removeItem(storeKey()); localStorage.removeItem("pace-last-uid"); } catch (e) {}
+        location.reload();
+      })
+      .catch(function (e) { DELETING = false; $("deleteMsg").textContent = (e && e.code) ? tr(FB.userError(e)) : tr("That did not work. Nothing was deleted."); });
+  });
+  reconcileAccount();
+}
+
+/* ---------- boot ---------- */
+function refreshAll() { renderTicker(); renderDayList(); renderUpNext(); renderCheckin(); renderRing(); refreshCalendar(); renderYear(); renderTodos(); renderHabits(); if ($("panel-progress").classList.contains("is-active")) renderProgress(); }
+applyI18n();
+initCalendar();
+applyAppearance();
+applySidebar();
+bindSettings();
+renderTitle();
+selectDate(L.todayKey(), false);
+renderTodos();
+renderHabits();
+checkNotifications();
+bindAccounts();
+if ("serviceWorker" in navigator) { navigator.serviceWorker.register("service-worker.js").catch(function () {}); }
+})();

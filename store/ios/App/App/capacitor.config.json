@@ -1,0 +1,22 @@
+{
+	"appId": "shop.ilseplacencia.pace",
+	"appName": "Pace Calendar",
+	"backgroundColor": "#f3f5fa",
+	"webDir": "www",
+	"plugins": {
+		"FirebaseAuthentication": {
+			"skipNativeAuth": true,
+			"providers": [
+				"google.com",
+				"apple.com"
+			]
+		}
+	},
+	"packageClassList": [
+		"SpeechRecognition",
+		"FirebaseAuthenticationPlugin",
+		"FilesystemPlugin",
+		"LocalNotificationsPlugin",
+		"SharePlugin"
+	]
+}
