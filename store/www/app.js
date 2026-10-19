@@ -1601,9 +1601,26 @@ function billingOnDevice() {
 function renderPlans() {
   var on = billingOnDevice();
   $("planBuy").hidden = !on;
+  $("planTerms").hidden = !on;
+  if (on) {
+    // The disclosure's prices come from the same source as
+    // the buttons' prices, so the two can never drift.
+    PaceBilling.storePrices().then(function (sp) {
+      var t = $("planTermsText"); if (!t) return;
+      t.textContent = tr("Plus, monthly ({m}) and Plus, yearly ({y}) renew automatically at those prices, until you cancel. Cancel anytime in your Apple ID subscriptions. Plus stays open until the end of the paid period. Plus for life ({l}) is one payment. It never renews.", {
+        m: sp[PaceBilling.products.monthly] || PaceBilling.productPrice("monthly"),
+        y: sp[PaceBilling.products.yearly] || PaceBilling.productPrice("yearly"),
+        l: sp[PaceBilling.products.lifetime] || PaceBilling.productPrice("lifetime")
+      });
+    }).catch(function () {});
+  }
   var honest = $("plusHonest");
   if (honest) honest.textContent = on ? tr("Unlock with a paid plan.") : tr("Unlock with a paid plan when plans open at launch. Nothing can be charged today.");
   var st = $("planState"); if (!st) return;
+  var holds = $("planHolds");
+  if (holds) holds.textContent = on
+    ? tr("Plus holds: all six Looks and Cute mode · Talk to it · repeating tasks · breaking a task into small steps · a stretch task borrowed from tomorrow · the energy levels in your own words · the To Do board · the kind round-up.")
+    : tr("When Plus arrives, it holds: all six Looks and Cute mode · Talk to it · repeating tasks · breaking a task into small steps · a stretch task borrowed from tomorrow · the energy levels in your own words · the To Do board · the kind round-up.");
   if (!on) { st.textContent = tr("Not on sale yet. Nothing to pay today."); return; }
   var s = PaceBilling.state();
   if (PaceBilling.plusActive() && s.owned) st.textContent = tr("Plus is yours. Everything is open.");
@@ -1794,8 +1811,13 @@ function reconcileAccount() {
       // billing layer reads it). The aggregate shard (owner
       // space) is the only outward fact: this account exists,
       // and when it arrived.
-      FB.fsSet("aggSignups/" + ACTIVE_UID, { createdAt: spine.createdAt }).catch(function () {});
-      return FB.fsSet(spinePath(), spine).then(function () { return null; });
+      // createdAt crosses the wire as a true timestamp (rules
+      // v2.3: server-checked at create, write-once after) — it
+      // anchors the free month, so it is born unfakeable; in
+      // memory it stays the ISO string every reader expects.
+      var born = new Date(spine.createdAt);
+      FB.fsSet("aggSignups/" + ACTIVE_UID, { createdAt: born }).catch(function () {});
+      return FB.fsSet(spinePath(), Object.assign({}, spine, { createdAt: born })).then(function () { return null; });
     }
     spine = sp; return null;
   }).then(function () {

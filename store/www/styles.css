@@ -508,6 +508,9 @@ html[data-cute="1"] .add-btn { border-radius: 16px; }
 .plan-card h4 { margin: 0 0 6px; font-family: var(--font-display); }
 .plan-card p { margin: 0 0 8px; color: var(--ink-2); }
 .plan-card p:last-child { margin-bottom: 0; }
+.plan-terms { margin-top: 10px; }
+.plan-terms p { font-size: .82em; line-height: 1.5; color: var(--ink-2); }
+.plan-terms .plan-links a { color: var(--accent-strong); }
 .plan-plus { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--card)); }
 .plan-price { color: var(--ink); font-weight: 700; }
 .plan-state { font-weight: 600; }
