@@ -1489,6 +1489,13 @@ function showGuide(step) {
    under an earlier stamp is what unlocks the re-offer. */
 var BOOT_T = Date.now();
 function noteNameSkip() {
+  // The skip also stamps THIS SITTING (sessionStorage survives
+  // reloads, dies with the app/tab): the re-offer's own rule is
+  // "never the same session", and a page reload is the same
+  // sitting — build 13's Leg 6 flake was the re-offer firing on
+  // the second boot of one sitting, caught or missed by the
+  // checker purely on reconcile timing.
+  try { sessionStorage.setItem("pace-name-skip-sitting", ACTIVE_UID || ""); } catch (e) {}
   if (!tourNeedsName()) return;
   if (!TOUR.some(function (s) { return s.kind === "name"; })) return;
   try { localStorage.setItem("pace-name-skip", (ACTIVE_UID || "") + ":" + BOOT_T); } catch (e) {}
@@ -1782,6 +1789,11 @@ function maybeJoinDoor() {
   // the name step) gets this as its first ask.
   try {
     if (localStorage.getItem("pace-name-reoffered") === ACTIVE_UID) { maybePotDoor(); return; }
+    // Same SITTING as the skip: never re-ask (the re-offer's own
+    // rule). A reload is the same sitting — without this, the
+    // second boot of one sitting re-asks, and whether a checker
+    // sees the sheet is a coin flip on reconcile timing.
+    if (sessionStorage.getItem("pace-name-skip-sitting") === ACTIVE_UID) { maybePotDoor(); return; }
     var sk = (localStorage.getItem("pace-name-skip") || "").split(":");
     if (sk[0] === ACTIVE_UID && !(Number(sk[1]) < BOOT_T)) { maybePotDoor(); return; } // skipped this very visit
     localStorage.setItem("pace-name-reoffered", ACTIVE_UID);
