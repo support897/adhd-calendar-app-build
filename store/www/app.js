@@ -231,9 +231,9 @@ function applySidebar() {
   if (calendar) calendar.updateSize();
 }
 document.querySelectorAll(".swatch[data-theme-set]").forEach(function (b) {
-  b.addEventListener("click", function () { var t = b.getAttribute("data-theme-set"); state.settings.appearance.theme = t; state.settings.appearance.bgChoice = "theme"; save(); applyAppearance(); if (t !== "white" && t !== "dark") maybePlus("look"); });
+  b.addEventListener("click", function () { var t = b.getAttribute("data-theme-set"); if (t !== "white" && t !== "dark" && !plusGate("look")) return; state.settings.appearance.theme = t; state.settings.appearance.bgChoice = "theme"; save(); applyAppearance(); });
 });
-$("cuteToggle").addEventListener("change", function () { state.settings.appearance.cute = $("cuteToggle").checked; save(); applyAppearance(); if ($("cuteToggle").checked) maybePlus("cute"); });
+$("cuteToggle").addEventListener("change", function () { if ($("cuteToggle").checked && !plusGate("cute")) { $("cuteToggle").checked = false; return; } state.settings.appearance.cute = $("cuteToggle").checked; save(); applyAppearance(); });
 /* Law E — the user's own photo as the background. The photo is user
    data: picking another look never deletes it; only Remove does,
    and Remove carries Undo (Law B2). A soft veil + an ink set chosen
@@ -243,6 +243,7 @@ $("bgPhotoFile").addEventListener("change", function () {
   var f = $("bgPhotoFile").files && $("bgPhotoFile").files[0];
   $("bgPhotoFile").value = "";
   if (!f) return;
+  if (!plusGate("look")) return;
   var url = URL.createObjectURL(f);
   var img = new Image();
   img.onload = function () {
@@ -277,6 +278,7 @@ $("bgPhotoFile").addEventListener("change", function () {
 });
 $("photoApply").addEventListener("click", function () {
   if (!state.settings.appearance.photo) return;
+  if (!plusGate("look")) return;
   state.settings.appearance.bgChoice = "photo"; save(); applyAppearance();
 });
 $("photoRemove").addEventListener("click", function () {
@@ -394,6 +396,7 @@ function bindRows(root) {
   });
   var st = root.querySelector('[data-act="stretch"]');
   if (st) st.addEventListener("click", function () {
+    if (!plusGate("stretch")) return;
     var t = baseTask(st.getAttribute("data-id"));
     if (t) { moveInstance(t, L.addDays(selected, 1), selected); toast(tr("Brought to today. Only because you asked.")); refreshAll(); }
   });
@@ -592,12 +595,15 @@ function renderYear() {
 /* ---------- panels ---------- */
 document.querySelectorAll(".side-item").forEach(function (b) {
   b.addEventListener("click", function () {
+    // The Progress panel holds the To Do board + the round-up
+    // (both Plus rows of the split) — its entry is the gate.
+    if (b.getAttribute("data-panel") === "progress" && !plusGate("board")) return;
     document.querySelectorAll(".side-item").forEach(function (x) { x.classList.remove("is-active"); });
     document.querySelectorAll(".panel").forEach(function (x) { x.classList.remove("is-active"); });
     b.classList.add("is-active");
     $("panel-" + b.getAttribute("data-panel")).classList.add("is-active");
     if (b.getAttribute("data-panel") === "progress") renderProgress();
-    if (b.getAttribute("data-panel") === "capture") maybePlus("talk");
+
     // Phone + the Muse-app shape: choosing an area shows it —
     // the menu gives the screen back (the sliver tap and the
     // close button do the same when no choice is made).
@@ -636,14 +642,18 @@ $("quickText").addEventListener("input", function () {
     (item.repeat ? " · " + esc(item.repeat) : "") + (item.essential ? " · must not slip" : "");
 });
 $("addSave").addEventListener("click", function () {
+  // A smallest version typed at creation is a teach (Plus);
+  // refused, the task still saves — without the taught version.
+  var minV = $("fMin").value.trim();
+  if (minV && !plusGate("steps")) minV = "";
   var task = null;
   var manualTitle = $("fTitle").value.trim();
   if (manualTitle) {
     var cat = L.categoryFor(manualTitle);
-    task = { title: manualTitle, date: $("fDate").value || selected, time: $("fTime").value || null, durationMin: Math.max(5, +$("fDur").value || 25), priority: 0, repeat: null, category: cat.id, color: cat.color, essential: $("fEssential").checked, steps: L.decompose(manualTitle, +$("fDur").value || 25, false), minVersion: $("fMin").value.trim(), fullVersion: $("fFull").value.trim() };
+    task = { title: manualTitle, date: $("fDate").value || selected, time: $("fTime").value || null, durationMin: Math.max(5, +$("fDur").value || 25), priority: 0, repeat: null, category: cat.id, color: cat.color, essential: $("fEssential").checked, steps: L.decompose(manualTitle, +$("fDur").value || 25, false), minVersion: minV, fullVersion: $("fFull").value.trim() };
   } else if ($("quickText").value.trim()) {
     var item = L.parseItem($("quickText").value.trim(), selected);
-    if (item) task = { title: item.title, date: item.date, time: item.time, durationMin: item.durationMin, priority: item.priority, repeat: item.repeat, category: item.category, color: item.color, essential: item.essential, steps: item.steps, minVersion: $("fMin").value.trim(), fullVersion: $("fFull").value.trim() };
+    if (item) task = { title: item.title, date: item.date, time: item.time, durationMin: item.durationMin, priority: item.priority, repeat: item.repeat, category: item.category, color: item.color, essential: item.essential, steps: item.steps, minVersion: minV, fullVersion: $("fFull").value.trim() };
   }
   if (!task) { toast(tr("Give it a title first, even a messy one.")); return; }
   task.id = uid(); task.status = "todo"; task.source = "manual"; task.originalText = $("quickText").value.trim(); task.skipDates = []; task.doneDates = [];
@@ -693,6 +703,7 @@ function renderSteps(t) {
 }
 $("dBreak").addEventListener("click", function () {
   var t = baseTask(currentTaskId); if (!t) return;
+  if (!plusGate("steps")) return;
   /* One break per task: a second tap used to append a whole duplicate
      set of steps (PACE-008). The button hides once steps exist; this
      guard covers a fast double-tap before the hide lands. */
@@ -702,7 +713,12 @@ $("dBreak").addEventListener("click", function () {
 });
 function persistSheetFields() {
   var t = baseTask(currentTaskId); if (!t) return;
-  t.minVersion = $("dMin").value.trim();
+  // Teaching (or re-teaching) the smallest version is a Plus
+  // act; USING a taught version on a low day stays free. A
+  // refused teach keeps the version already taught.
+  var taught = $("dMin").value.trim();
+  if (taught !== (t.minVersion || "") && !plusGate("steps")) taught = t.minVersion || "";
+  t.minVersion = taught;
   t.fullVersion = $("dFull").value.trim();
   t.time = $("dTime").value || null;
   t.durationMin = Math.max(5, +$("dDur").value || t.durationMin);
@@ -751,6 +767,7 @@ $("dDelete").addEventListener("click", function () {
 
 /* ---------- capture ---------- */
 $("parseBtn").addEventListener("click", function () {
+  if (!plusGate("talk")) return;
   var text = $("dumpText").value;
   drafts = L.parseDump(text, L.todayKey());
   if (!drafts.length) { $("captureMsg").textContent = tr("Nothing I could sort yet. Try one thing per line, like: call the dentist tomorrow at 3pm."); return; }
@@ -1161,9 +1178,15 @@ function bindSettings() {
 function readSettings() {
   var s = state.settings;
   s.checkinTime = $("checkinTime").value || "08:00";
-  s.names.low = $("nameLow").value.trim() || "Low";
-  s.names.steady = $("nameSteady").value.trim() || "Steady";
-  s.names.full = $("nameFull").value.trim() || "Full";
+  // The energy levels in your own words is a Plus row: a
+  // refused rename keeps the names already in place (the
+  // check-in itself, with the factory words, stays free).
+  var wantNames = { low: $("nameLow").value.trim() || "Low", steady: $("nameSteady").value.trim() || "Steady", full: $("nameFull").value.trim() || "Full" };
+  if ((wantNames.low !== s.names.low || wantNames.steady !== s.names.steady || wantNames.full !== s.names.full) && !plusGate("names")) {
+    $("nameLow").value = s.names.low; $("nameSteady").value = s.names.steady; $("nameFull").value = s.names.full;
+  } else {
+    s.names.low = wantNames.low; s.names.steady = wantNames.steady; s.names.full = wantNames.full;
+  }
   s.notif.checkin = $("nCheckin").checked; s.notif.start = $("nStart").checked;
   s.notif.setup = Math.max(0, Math.min(60, +$("nSetup").value || 5));
   s.notif.digest = $("nDigest").checked;
@@ -1531,31 +1554,83 @@ $("guideNext").addEventListener("click", function () {
 $("guideAgain").addEventListener("click", function () { TOUR = []; buildTour(); showGuide(0); });
 
 /* ---------- the upgrade moment ---------- */
-/* Fires ONLY on a paid-edge tap (a Plus look, Cute mode,
-   Talk to it) — never on open, never twice for the same
-   edge in one visit. It invites to Plans; it never charges
-   and never locks: the tapped thing works exactly as today,
-   popup or no popup. (Pace has no repeat picker — repeats
-   arrive through Talk to it, already an edge, and through
-   import, a completed flow with no wanting-moment.) */
-var plusShown = {}, plusEntries = {};
+/* THE LOCKED TAP (the paid/free rules, 19 Oct: paid features release
+   only on an active entitlement; a locked tap SPEAKS and opens
+   the plans path — never silent, never a partial unlock).
+   plusGate(edge) is the single door every Plus feature's apply
+   point passes: entitled (a live subscriptions record or the
+   free month — PaceBilling.plusActive) applies silently; not
+   entitled speaks through maybePlus and the feature does NOT
+   apply. This supersedes the PACE-002 timing of the
+   nothing-locked era (first entry clean, speak on a repeat
+   visit): that ruling governed a popup over features that
+   still worked; with real locks the first locked tap speaks
+   too. (Pace has no repeat picker — repeats arrive through
+   Talk to it, already an edge, and through import, a completed
+   flow with no wanting-moment.) */
+var plusShown = {};
 function maybePlus(edge) {
-  if (DEMO_SESSION || plusShown[edge]) return;
-  /* PACE-002 (HQ ruling): the FIRST entry to an edge lands clean —
-     the first minute belongs to the feature. The edge speaks on a
-     repeat visit, still at most once per visit. */
-  plusEntries[edge] = (plusEntries[edge] || 0) + 1;
-  if (plusEntries[edge] < 2) return;
+  if (DEMO_SESSION) return;
   plusShown[edge] = 1;
   $("plusArt").innerHTML = skipSvg("welcome");
   $("plusSheet").hidden = false;
+  renderPlans();
+}
+function plusGate(edge) {
+  if (window.PaceBilling && PaceBilling.plusActive()) return true;
+  maybePlus(edge);
+  return false;
 }
 function closePlus() { $("plusSheet").hidden = true; }
 $("plusClose").addEventListener("click", closePlus);
 $("plusNotNow").addEventListener("click", closePlus);
-$("plusPlans").addEventListener("click", function () { closePlus(); $("plansSheet").hidden = false; });
-$("plansOpen").addEventListener("click", function () { $("plansSheet").hidden = false; });
+$("plusPlans").addEventListener("click", function () { closePlus(); renderPlans(); $("plansSheet").hidden = false; });
+$("plansOpen").addEventListener("click", function () { renderPlans(); $("plansSheet").hidden = false; });
 $("plansClose").addEventListener("click", function () { $("plansSheet").hidden = true; });
+
+/* ---------- plans + buying (the enabling build) ----------
+   The buy buttons are Pace's own (the sheet's classes, the
+   app's voice) and they live only where a store lives: the
+   packaged app, once billing is configured. Everywhere else
+   the sheet keeps the honest not-on-sale line. Prices on the
+   buttons are the store's own strings for the reader's
+   storefront, with the A$ anchors as the fallback. */
+function billingOnDevice() {
+  try { return !!(window.PaceBilling && PaceBilling.live() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Purchases); } catch (e) { return false; }
+}
+function renderPlans() {
+  var on = billingOnDevice();
+  $("planBuy").hidden = !on;
+  var honest = $("plusHonest");
+  if (honest) honest.textContent = on ? tr("Unlock with a paid plan.") : tr("Unlock with a paid plan when plans open at launch. Nothing can be charged today.");
+  var st = $("planState"); if (!st) return;
+  if (!on) { st.textContent = tr("Not on sale yet. Nothing to pay today."); return; }
+  var s = PaceBilling.state();
+  if (PaceBilling.plusActive() && s.owned) st.textContent = tr("Plus is yours. Everything is open.");
+  else if (PaceBilling.plusActive()) st.textContent = tr("Your first month is free, on us. The buttons are here when you are ready.");
+  else st.textContent = tr("Pick a plan to unlock everything.");
+  PaceBilling.storePrices().then(function (p) {
+    if (!p) return;
+    $("buyMonthly").textContent = tr("Plus, monthly") + " — " + (p[PaceBilling.products.monthly] || "A$4.99");
+    $("buyYearly").textContent = tr("Plus, yearly") + " — " + (p[PaceBilling.products.yearly] || "A$39.99");
+    $("buyLifetime").textContent = tr("Plus for life") + " — " + (p[PaceBilling.products.lifetime] || "A$99.99");
+  }).catch(function () {});
+}
+function buyFlow(productId) {
+  PaceBilling.buy(productId).then(function () {
+    renderPlans();
+    toast(PaceBilling.plusActive() ? tr("Plus is yours. Everything is open.") : tr("That did not go through. Nothing was charged."));
+  }).catch(function () { toast(tr("That did not go through. Nothing was charged.")); });
+}
+$("buyMonthly").addEventListener("click", function () { buyFlow(PaceBilling.products.monthly); });
+$("buyYearly").addEventListener("click", function () { buyFlow(PaceBilling.products.yearly); });
+$("buyLifetime").addEventListener("click", function () { buyFlow(PaceBilling.products.lifetime); });
+$("buyRestore").addEventListener("click", function () {
+  PaceBilling.restore().then(function () {
+    renderPlans();
+    toast(PaceBilling.plusActive() ? tr("Welcome back. Plus is yours again.") : tr("No past purchase found for this account."));
+  }).catch(function () { toast(tr("That did not go through. Nothing was charged.")); });
+});
 
 /* ---------- bring my calendar in (shared module: IMPORT-DESIGN.md) ---------- */
 var DEMO_SESSION = /[?&]demo=1\b/.test(location.search) || !!(state.settings && state.settings.demo);
@@ -1714,15 +1789,21 @@ function reconcileAccount() {
   FB.fsGet(spinePath()).then(function (sp) {
     if (!sp) {
       spine = { createdAt: new Date().toISOString(), lastActiveAt: new Date().toISOString(), deletedByUser: false };
-      // No plan on the user record — entitlement lives at _comp
-      // alone. The aggregate shard (owner space) is the only
-      // outward fact: this account exists, and when it arrived.
+      // No plan on the user record — the entitlement record
+      // lives at subscriptions/{uid} (system-written; the
+      // billing layer reads it). The aggregate shard (owner
+      // space) is the only outward fact: this account exists,
+      // and when it arrived.
       FB.fsSet("aggSignups/" + ACTIVE_UID, { createdAt: spine.createdAt }).catch(function () {});
       return FB.fsSet(spinePath(), spine).then(function () { return null; });
     }
     spine = sp; return null;
   }).then(function () {
     spineTouchDaily();
+    // The entitlement read rides the reconcile (the spine's
+    // createdAt anchors the free month; the record read is the
+    // billing layer's alone — it never writes).
+    if (window.PaceBilling && PaceBilling.refresh) { try { PaceBilling.refresh(FB, ACTIVE_UID, spine && spine.createdAt); } catch (e) {} }
     return FB.fsGet(statePath());
   }).then(function (doc) {
     renderAccount();
@@ -2151,5 +2232,6 @@ renderTodos();
 renderHabits();
 checkNotifications();
 bindAccounts();
+if (!ACTIVE_UID && window.PaceBilling && PaceBilling.refresh) { try { PaceBilling.refresh(null, null, null); } catch (e) {} }
 if ("serviceWorker" in navigator) { navigator.serviceWorker.register("service-worker.js").catch(function () {}); }
 })();
