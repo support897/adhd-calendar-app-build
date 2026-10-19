@@ -47,9 +47,14 @@
   // through here. Known auth codes speak precisely via friendly();
   // anything else is classified by shape into a calm line.
   function userError(e) {
+    // An abort (the fetch bound firing) is a connection
+    // truth, checked FIRST: a DOMException carries a legacy
+    // numeric code that would otherwise fall into friendly()
+    // and read as a generic failure instead of no connection.
+    if (e && e.name === "AbortError") return "No connection right now. Your calendar is safe on this device.";
     if (e && e.code) return friendly(e.code);
     var m = (e && e.message) || "";
-    if ((e && e.name === "TypeError") || /failed to fetch|networkerror|load failed/i.test(m)) {
+    if ((e && (e.name === "TypeError" || e.name === "AbortError")) || /failed to fetch|networkerror|load failed/i.test(m)) {
       return "No connection right now. Your calendar is safe on this device.";
     }
     if (e && e.status === 403) {
@@ -58,8 +63,23 @@
     return "Something did not work. Try again.";
   }
 
+  // THE BOUND (fleet census, 19 Oct): no fetch in this layer
+  // waits forever. A stalled socket used to pend indefinitely
+  // — the door sat on "One moment…" and the boot reconcile
+  // wedged sync for the session. Every call now aborts at the
+  // limit and rejects, and userError already speaks the honest
+  // network line for exactly that shape.
+  function fetchT(url, opts, ms) {
+    var limit = ms || 15000;
+    if (typeof AbortController === "undefined") return fetch(url, opts);
+    var ctl = new AbortController();
+    var timer = setTimeout(function () { try { ctl.abort(); } catch (e) {} }, limit);
+    var o = {}; Object.keys(opts || {}).forEach(function (k) { o[k] = opts[k]; });
+    o.signal = ctl.signal;
+    return fetch(url, o).then(function (r) { clearTimeout(timer); return r; }, function (e) { clearTimeout(timer); throw e; });
+  }
   function authCall(name, body) {
-    return fetch(idpUrl(name), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    return fetchT(idpUrl(name), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
         if (!res.ok) { var code = (res.j && res.j.error && res.j.error.message) || "UNKNOWN"; var e = new Error(friendly(code)); e.code = code; throw e; }
@@ -81,7 +101,7 @@
   }
   function refresh() {
     if (!session) return Promise.reject(new Error("Not signed in."));
-    return fetch(TOKEN_HOST + "/v1/token?key=" + cfg.apiKey, {
+    return fetchT(TOKEN_HOST + "/v1/token?key=" + cfg.apiKey, {
       method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: "grant_type=refresh_token&refresh_token=" + encodeURIComponent(session.refreshToken),
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
@@ -132,7 +152,7 @@
     return token().then(function (tok) {
       var opts = { method: method, headers: { "Authorization": "Bearer " + tok, "Content-Type": "application/json" } };
       if (bodyObj) opts.body = JSON.stringify(bodyObj);
-      return fetch(fsBase() + path, opts).then(function (r) {
+      return fetchT(fsBase() + path, opts).then(function (r) {
         if (r.status === 404) return null;
         return r.json().then(function (j) {
           if (!r.ok) { var e = new Error((j.error && j.error.message) || "Firestore error"); e.status = r.status; throw e; }
@@ -178,7 +198,7 @@
        counter/feed collections — never for user state). */
     fsList: function (collectionPath) {
       return token().then(function (tok) {
-        return fetch(fsBase() + collectionPath + "?pageSize=1000", { headers: { "Authorization": "Bearer " + tok } })
+        return fetchT(fsBase() + collectionPath + "?pageSize=1000", { headers: { "Authorization": "Bearer " + tok } })
           .then(function (r) {
             if (r.status === 404) return [];
             return r.json().then(function (j) {
@@ -202,7 +222,7 @@
         }
         var q = { structuredAggregationQuery: { aggregations: [{ sum: { field: { fieldPath: field } }, alias: "s" }], structuredQuery: { from: [{ collectionId: collectionId }] } } };
         if (where) q.structuredAggregationQuery.structuredQuery.where = where;
-        return fetch(fsBase().replace(/documents\/$/, "") + "documents:runAggregationQuery", {
+        return fetchT(fsBase().replace(/documents\/$/, "") + "documents:runAggregationQuery", {
           method: "POST", headers: { "Authorization": "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify(q),
         }).then(function (r) {
           return r.json().then(function (j) {
@@ -225,7 +245,7 @@
         }
         var q = { structuredAggregationQuery: { aggregations: [{ count: {}, alias: "c" }], structuredQuery: { from: [{ collectionId: collectionId }] } } };
         if (where) q.structuredAggregationQuery.structuredQuery.where = where;
-        return fetch(fsBase().replace(/documents\/$/, "") + "documents:runAggregationQuery", {
+        return fetchT(fsBase().replace(/documents\/$/, "") + "documents:runAggregationQuery", {
           method: "POST", headers: { "Authorization": "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify(q),
         }).then(function (r) {
           return r.json().then(function (j) {

@@ -198,6 +198,8 @@
     "Not on sale yet. Nothing to pay today.": "Aún no está a la venta. Hoy no hay nada que pagar.",
     "Unlock with a paid plan.": "Desbloquéalo con un plan pago.",
     "Plus holds: all six Looks and Cute mode · Talk to it · repeating tasks · breaking a task into small steps · a stretch task borrowed from tomorrow · the energy levels in your own words · the To Do board · the kind round-up.": "Plus incluye: los seis Looks y el modo Cute · Talk to it · tareas repetidas · dividir una tarea en pasos pequeños · una tarea extra traída de mañana · los niveles de energía en tus propias palabras · el tablero To Do · el resumen amable.",
+    "Google did not answer. Nothing changed. Try again, or use email + password.": "Google no respondió. Nada cambió. Inténtalo de nuevo, o usa tu correo y contraseña.",
+    "Apple did not answer. Nothing changed. Try again, or use email + password.": "Apple no respondió. Nada cambió. Inténtalo de nuevo, o usa tu correo y contraseña.",
     "Plus is yours. Everything is open.": "Plus es tuyo. Todo está abierto.",
     "Your first month is free, on us. The buttons are here when you are ready.": "Tu primer mes es gratis, por nuestra cuenta. Los botones están aquí cuando estés listo.",
     "Pick a plan to unlock everything.": "Elige un plan para desbloquear todo.",

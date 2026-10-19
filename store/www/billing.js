@@ -60,7 +60,13 @@
     var chain = Promise.resolve();
     if (!_rcConfigured) { _rcConfigured = true; chain = chain.then(function () { return P.configure({ apiKey: key, appUserID: uid || undefined }); }); }
     if (uid && _rcUid !== uid) { _rcUid = uid; chain = chain.then(function () { return P.logIn({ appUserID: uid }); }); }
-    return chain.then(function () { return P.getCustomerInfo(); }).then(function (res) { return (res && (res.customerInfo || res)) || null; }).catch(function () { return null; });
+    // Bounded (fleet census, 19 Oct): a store plugin promise
+    // that never settles must not wedge the entitlement read
+    // for the session — at the bound the read answers "no
+    // word from the store" and the cached state stands.
+    var read = chain.then(function () { return P.getCustomerInfo(); });
+    var bound = new Promise(function (res) { setTimeout(function () { res(null); }, 12000); });
+    return Promise.race([read, bound]).then(function (res) { return (res && (res.customerInfo || res)) || null; }).catch(function () { return null; });
   }
   // CustomerInfo → the best §3 grant it carries.
   function rcGrant(info, now) {
@@ -123,8 +129,18 @@
   function evalRecord(rec, now) {
     if (!rec) return { plus: false, until: 0 };
     if (rec.entitlement !== "plus" && rec.entitlement !== "lifetime") return { plus: false, until: 0 };
-    if (rec.status !== "trialing" && rec.status !== "active") return { plus: false, until: 0 };
+    // Finance's cancellation pin (19 Oct, ruling (b)): the
+    // receiver writes status "cancelled" at cancel-time with
+    // period_ends_at standing, and the evaluation opens on
+    // it while that period is still in the future (the
+    // customer words promise the same: Plus stays open
+    // until the end of the period you paid for). A cancelled
+    // record with NO period standing is shut — the pin
+    // names a future end, not an absence. past_due stays
+    // shut under the filed rule.
+    if (rec.status !== "trialing" && rec.status !== "active" && rec.status !== "cancelled") return { plus: false, until: 0 };
     var end = rec.period_ends_at || rec.expires_at || null;
+    if (rec.status === "cancelled" && !end) return { plus: false, until: 0 };
     var endMs = end ? Date.parse(end) : Infinity;
     if (!(now < endMs)) return { plus: false, until: 0 };
     return { plus: true, until: endMs };
@@ -174,5 +190,12 @@
   // prices for the user's storefront (never a desk conversion).
   function priceLine() { return "A$4.99 a month, or A$39.99 a year. First month free."; }
 
-  window.PaceBilling = { live: billingLive, plusActive: plusActive, refresh: refresh, state: function () { return _state; }, priceLine: priceLine, products: PRODUCTS, entitlement: ENTITLEMENT, buy: buy, restore: restore, storePrices: storePrices };
+  // The locked A$ anchors, per slot — the fallback every
+  // price surface uses when the store's own strings are not
+  // in hand (a partial offerings response must still compose
+  // an honest price, never a blank).
+  var ANCHORS = { monthly: "A$4.99", yearly: "A$39.99", lifetime: "A$99.99" };
+  function productPrice(slot) { return ANCHORS[slot] || ""; }
+
+  window.PaceBilling = { live: billingLive, plusActive: plusActive, refresh: refresh, state: function () { return _state; }, priceLine: priceLine, products: PRODUCTS, entitlement: ENTITLEMENT, buy: buy, restore: restore, storePrices: storePrices, productPrice: productPrice };
 })();

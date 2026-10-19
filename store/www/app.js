@@ -1803,6 +1803,20 @@ function reconcileAccount() {
   // settles, success or failure, and any held push then fires
   // with the post-adopt state.
   reconcilePending = true;
+  // THE WATCHDOG (fleet census, 19 Oct): if the reconcile's
+  // reads never settle (a dead socket under the bounded fetch
+  // still leaves slow chains), the gate must not wedge sync
+  // for the whole session. At the bound the tail's own settle
+  // runs — gate lifts, held pushes fire, the guide decision
+  // reads local truth. A late-settling chain still lands
+  // safely behind it: adoption compares content stamps, and
+  // the tail is idempotent.
+  var watchdog = setTimeout(function () {
+    if (!reconcilePending) return;
+    reconcilePending = false;
+    if (syncDirty) { syncDirty = false; syncNow(); }
+    if (state && state.welcomed && state.settings && !state.settings.guideDone) maybeGuide();
+  }, 15000);
   FB.fsGet(spinePath()).then(function (sp) {
     if (!sp) {
       spine = { createdAt: new Date().toISOString(), lastActiveAt: new Date().toISOString(), deletedByUser: false };
@@ -1871,6 +1885,7 @@ function reconcileAccount() {
     // fire with the post-adopt state, and the tour decision reads
     // the settled state (a pre-adopt guideDone once re-showed the
     // tour on a second boot — remainder-round Leg 6's wobble).
+    clearTimeout(watchdog);
     reconcilePending = false;
     if (syncDirty) { syncDirty = false; syncNow(); }
     if (state && state.welcomed && state.settings && !state.settings.guideDone) maybeGuide();
@@ -1998,6 +2013,18 @@ function renderAccount() {
    skipNativeAuth is set in capacitor.config.json, so the plugin
    creates no parallel session. On the web this returns null and the
    doors run exactly as before. */
+/* THE DOOR BOUND (fleet census, 19 Oct): a native sign-in
+   promise that never settles — the sheet never appears, the
+   bridge wedges — used to leave the door on "Opening…"
+   forever. The bound is generous (a real person at a real
+   consent sheet is never rushed); what it kills is the
+   infinite wait, and the fallback keeps the email door
+   standing. */
+function doorBound(p, provider) {
+  return Promise.race([p, new Promise(function (_, rej) {
+    setTimeout(function () { var e = new Error("door-timeout"); e.doorTimeout = provider; rej(e); }, 45000);
+  })]);
+}
 function nativeAuthPlugin() {
   try {
     var C = window.Capacitor;
@@ -2095,12 +2122,15 @@ function bindAccounts() {
     var natG = nativeAuthPlugin();
     if (natG) {
       authBusy(tr("Opening Google…"));
-      natG.signInWithGoogle().then(function (res) {
+      doorBound(natG.signInWithGoogle(), "google").then(function (res) {
         var tok = res && res.credential && res.credential.idToken;
         if (!tok) { authBusy(tr("Google sign-in was closed. Nothing changed.")); return; }
         FB.googleSignIn(tok).then(function (s) { ACTIVE_UID = s.uid; afterSignIn(); })
           .catch(function (e) { authBusy(tr(FB.userError(e))); });
-      }).catch(function () { authBusy(tr("Google sign-in was closed. Nothing changed.")); });
+      }).catch(function (e) {
+        if (e && e.doorTimeout) authBusy(tr("Google did not answer. Nothing changed. Try again, or use email + password."));
+        else authBusy(tr("Google sign-in was closed. Nothing changed."));
+      });
       return;
     }
     var cid = window.PACE_FB_CONFIG && window.PACE_FB_CONFIG.googleClientId;
@@ -2133,7 +2163,7 @@ function bindAccounts() {
     var natA = nativeAuthPlugin();
     if (natA) {
       authBusy(tr("Opening Apple…"));
-      natA.signInWithApple().then(function (res) {
+      doorBound(natA.signInWithApple(), "apple").then(function (res) {
         var cred = res && res.credential;
         if (!cred || !cred.idToken) { authBusy(tr("Apple sign-in was closed. Nothing changed.")); return; }
         try { // The plugin offers the name on first authorisation — carry it for the tour, like the web door.
@@ -2142,7 +2172,10 @@ function bindAccounts() {
         } catch (e) {}
         FB.appleSignIn(cred.idToken, null, cred.nonce || null).then(function (sess) { ACTIVE_UID = sess.uid; afterSignIn(); })
           .catch(function (e) { authBusy(tr(FB.userError(e))); });
-      }).catch(function () { authBusy(tr("Apple sign-in was closed. Nothing changed.")); });
+      }).catch(function (e) {
+        if (e && e.doorTimeout) authBusy(tr("Apple did not answer. Nothing changed. Try again, or use email + password."));
+        else authBusy(tr("Apple sign-in was closed. Nothing changed."));
+      });
       return;
     }
     var cfgA = window.PACE_FB_CONFIG || {};
