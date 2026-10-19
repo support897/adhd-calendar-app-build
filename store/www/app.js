@@ -1613,7 +1613,10 @@ $("importFile").addEventListener("change", function () {
   rd.readAsText(f);
   $("importFile").value = "";
 });
-if (state.welcomed && !state.settings.guideDone) maybeGuide();
+/* Signed-in boots defer the tour decision to the reconcile's
+   tail — the settled state's guideDone governs, never the
+   pre-adopt read. Guests (no session) decide immediately. */
+if (!ACTIVE_UID && state.welcomed && !state.settings.guideDone) maybeGuide();
 
 /* ---------- accounts (the accounts wave) ----------
    Guest mode is forever: everything below is inert unless the
@@ -1625,6 +1628,8 @@ if (state.welcomed && !state.settings.guideDone) maybeGuide();
 var spine = null;
 var syncTimer = null;
 var syncBusy = false;
+var syncDirty = false;
+var reconcilePending = false;
 function spinePath() { return "users/" + ACTIVE_UID; }
 function statePath() { return "users/" + ACTIVE_UID + "/data/state"; }
 function scheduleSync() {
@@ -1633,14 +1638,33 @@ function scheduleSync() {
   syncTimer = setTimeout(syncNow, 1200);
 }
 var DELETING = false;
+/* THE SYNC RACE (QA remainder round, 19 Oct — legs 1/5 lost data
+   on some runs, kept it on others): three holes, one disease —
+   content could move backwards while its stamps moved forwards.
+   (1) A debounced push could land WHILE a sign-in reconcile was
+   still fetching, stamping pre-adopt content onto the server.
+   (2) A push arriving while another was in flight was DROPPED,
+   leaving the server holding older content under a fresher
+   write-time stamp; the next adopt then threw the newer local
+   data away. (3) Sign-out reloaded without flushing, so the last
+   seconds of changes never left the device. The fixes: pushes
+   GATE on the reconcile (never dropped — marked dirty and fired
+   the moment the gate lifts, carrying post-adopt state); a push
+   in flight re-queues instead of dropping; the state doc's
+   updatedAt is the CONTENT's own stamp (state.updatedAt, set by
+   save()), never the write time; and sign-out flushes first. */
 function syncNow() {
-  if (!ACTIVE_UID || !FB.configured || syncBusy || DELETING) return;
-  syncBusy = true;
+  if (!ACTIVE_UID || !FB.configured || DELETING) return Promise.resolve();
+  if (reconcilePending || syncBusy) { syncDirty = true; return Promise.resolve(); }
+  syncBusy = true; syncDirty = false;
   var payload = JSON.stringify(state);
-  FB.fsSet(statePath(), { stateJson: payload, updatedAt: new Date().toISOString() })
-    .then(function () { syncBusy = false; }, function () { syncBusy = false; });
+  var stamp = new Date((state && state.updatedAt) || Date.now()).toISOString();
+  var p = FB.fsSet(statePath(), { stateJson: payload, updatedAt: stamp }).then(function () {}, function () {});
+  var settle = function () { syncBusy = false; if (syncDirty) { syncDirty = false; syncNow(); } };
+  p.then(settle, settle);
   var note = $("accountNote");
   if (note && payload.length > 800000) note.textContent = tr("Your saved calendar is getting large ({kb} KB). It still fits — a tidy-up option is coming before it ever matters.", { kb: Math.round(payload.length / 1000) });
+  return p;
 }
 function spineTouchDaily() {
   if (!spine) return;
@@ -1675,6 +1699,11 @@ function adoptStateObject(obj) {
 }
 function reconcileAccount() {
   if (!ACTIVE_UID || !FB.configured) return;
+  // The gate: while this reconcile runs, syncNow holds every push
+  // (see the race note at syncNow). The gate lifts when the chain
+  // settles, success or failure, and any held push then fires
+  // with the post-adopt state.
+  reconcilePending = true;
   FB.fsGet(spinePath()).then(function (sp) {
     if (!sp) {
       spine = { createdAt: new Date().toISOString(), lastActiveAt: new Date().toISOString(), deletedByUser: false };
@@ -1691,12 +1720,33 @@ function reconcileAccount() {
   }).then(function (doc) {
     renderAccount();
     if (doc && typeof doc.stateJson === "string") {
-      var serverAt = Date.parse(doc.updatedAt || "") || 0;
+      // The adopt decision reads the CONTENT's own stamp — the
+      // one inside the payload (save() sets state.updatedAt) —
+      // never the doc's write history. A doc written by an older
+      // build can carry a fresh write-time stamp over older
+      // content; the inner stamp cannot lie that way. Only
+      // strictly newer server content is ever adopted, so an
+      // adopt can never move this device backwards in time.
+      var serverObj = null;
+      try { serverObj = JSON.parse(doc.stateJson); } catch (e) {}
+      var serverAt = (serverObj && serverObj.updatedAt) || Date.parse(doc.updatedAt || "") || 0;
       var localAt = (state && state.updatedAt) || 0;
-      if (serverAt > localAt) {
-        try { adoptStateObject(JSON.parse(doc.stateJson)); } catch (e) {}
+      if (serverObj && serverAt > localAt) {
+        adoptStateObject(serverObj);
+      } else {
+        // Local is the newer truth and the server is behind (a
+        // push lost to a closed app, a killed debounce, an older
+        // build's drop): the local state is OWED to the server.
+        // Mark it dirty — the gate-lift flush in the tail pushes
+        // it, so a behind-server heals at every sign-in instead
+        // of waiting for the user's next edit (by which time a
+        // second device may have adopted the stale copy).
+        syncDirty = true;
       }
       renderAccount();
+    } else {
+      // No server doc yet: this device's state is owed too.
+      syncDirty = true;
     }
     // The door is decided HERE, after any adoption — and by
     // CONTENT, not by the state doc's existence: a fresh
@@ -1706,7 +1756,15 @@ function reconcileAccount() {
     // twin journey: the door never fired, mock always won).
     adoptPendingName();
     maybeJoinDoor();
-  }).catch(function () { renderAccount(); });
+  }).catch(function () { renderAccount(); }).then(function () {
+    // Gate lifts HERE, whichever way the chain went: held pushes
+    // fire with the post-adopt state, and the tour decision reads
+    // the settled state (a pre-adopt guideDone once re-showed the
+    // tour on a second boot — remainder-round Leg 6's wobble).
+    reconcilePending = false;
+    if (syncDirty) { syncDirty = false; syncNow(); }
+    if (state && state.welcomed && state.settings && !state.settings.guideDone) maybeGuide();
+  });
 }
 /* Door-first joining, v4: after the door the user is inside
    the app and Skip's TOUR asks the name as its first stop.
@@ -1998,7 +2056,13 @@ function bindAccounts() {
   });
   $("accountOut").addEventListener("click", function () {
     try { localStorage.setItem("pace-last-uid", ACTIVE_UID || ""); } catch (e) {}
-    FB.signOut(); location.reload();
+    // Flush the departing account's held push BEFORE the reload:
+    // a debounced sync that dies with the page takes the last
+    // seconds of changes with it (the remainder-round loss).
+    // Capped — a hung network never traps the user on this tap.
+    var leave = function () { FB.signOut(); location.reload(); };
+    if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+    Promise.race([syncNow(), new Promise(function (r) { setTimeout(r, 1500); })]).then(leave, leave);
   });
   $("accountDownload").addEventListener("click", function () {
     var json = JSON.stringify(state, null, 2);
