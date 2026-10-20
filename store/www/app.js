@@ -149,7 +149,7 @@ function seed() {
   ];
   return { tasks: tasks, feelings: {}, settings: defaultSettings(), welcomed: false, sent: {}, todos: [], habits: [], imports: [] };
 }
-if (!state) { state = ACTIVE_UID ? freshAccountState() : seed(); save(); }
+if (!state) { state = ACTIVE_UID ? freshAccountState() : seed(); save(); if (ACTIVE_UID) { state.updatedAt = 0; try { localStorage.setItem(storeKey(), JSON.stringify(state)); } catch (e) {} } }
 
 /* ---------- instances (recurrence expansion) ---------- */
 function repeatMatches(task, key) {
@@ -409,6 +409,11 @@ function toggleDone(id, dateKey) {
     if (i === -1) t.doneDates.push(dateKey); else t.doneDates.splice(i, 1);
   } else {
     t.status = t.status === "done" ? "todo" : "done";
+    // QA NIGHT F2: the payload also carries a done flag (load()
+    // normalises one onto every task). It must agree with the
+    // status on EVERY push — derive it here, at the write, not
+    // only at load, or the synced bytes contradict themselves.
+    t.done = t.status === "done";
     if (t.status === "done") toast(tr("Done. That counts."));
   }
   save(); refreshAll();
@@ -1860,7 +1865,21 @@ function reconcileAccount() {
       try { serverObj = JSON.parse(doc.stateJson); } catch (e) {}
       var serverAt = (serverObj && serverObj.updatedAt) || Date.parse(doc.updatedAt || "") || 0;
       var localAt = (state && state.updatedAt) || 0;
-      if (serverObj && serverAt > localAt) {
+      // QA NIGHT F1 (critical): an EMPTY local state can never
+      // outrank server content, whatever the stamps say. A
+      // fresh device's born state was save()-stamped at birth
+      // (Date.now()), which beat the server's older content
+      // stamp — the gate-lift flush then pushed the empty
+      // state over the account's real tasks (proven twice by
+      // QA, fresh-context shape; masked same-context because
+      // the local copy pushes itself back). Born states now
+      // claim no content time (updatedAt 0 — see
+      // freshAccountState), AND this invariant stands at the
+      // decision itself as the second lock: local with no user
+      // content + a server doc with content = ADOPT.
+      var localEmpty = !(state && ((state.tasks || []).length || (state.todos || []).length || (state.habits || []).length || Object.keys(state.feelings || {}).length));
+      var serverHas = !!(serverObj && ((serverObj.tasks || []).length || (serverObj.todos || []).length || (serverObj.habits || []).length || Object.keys(serverObj.feelings || {}).length));
+      if (serverObj && (serverAt > localAt || (localEmpty && serverHas))) {
         adoptStateObject(serverObj);
       } else {
         // Local is the newer truth and the server is behind (a
@@ -1980,6 +1999,11 @@ function resolvePot(bring) {
 function freshAccountState() {
   var s = seed();
   s.tasks = []; s.todos = []; s.habits = []; s.feelings = {}; s.imports = [];
+  // A born state has NO content, so it claims NO content time:
+  // updatedAt 0 keeps its birth save() from outranking the
+  // account's real server content at the reconcile (QA F1).
+  // The boot path pins it back to 0 after the birth save().
+  s.updatedAt = 0;
   return s;
 }
 function renderAccount() {
