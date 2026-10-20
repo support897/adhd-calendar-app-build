@@ -270,6 +270,8 @@ html[data-sb="collapsed"] #main { padding-left: 70px; }
 /* F2 (final sweep): the Start button was a bare browser button
    (34x21px) — now a real pill at the house tap floor. */
 .up-next button[data-un] { margin-left: 10px; min-height: 44px; padding: 10px 20px; border: 0; border-radius: 999px; background: var(--accent); color: #fff; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; vertical-align: middle; }
+.up-next .un-step { display: block; color: var(--ink-3); margin-top: 3px; }
+.up-next button[data-un].un-start { display: block; margin: 10px 0 0; }
 .up-next button { border: 0; background: none; color: var(--accent); font-size: 15px; padding: 0; margin-left: 8px; }
 
 /* Calendar (FullCalendar restyle to flat iPhone look) */

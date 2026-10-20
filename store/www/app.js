@@ -440,8 +440,13 @@ function renderUpNext() {
   if (!next) { el.hidden = true; return; }
   el.hidden = false;
   var firstStep = (next.steps && next.steps.some(function (s) { return !s.done; })) ? L.nextStepText(next) : "";
+  // The step sentence reads WHOLE, on its own line (PACE-016:
+  // the Start pill used to flow inline inside it and split the
+  // sentence around the button). With a step standing, the
+  // pill takes its own row under the sentence; without one it
+  // keeps its designed spot at the end of the title line.
   el.innerHTML = '<span class="un-label">' + tr("Up next") + '</span><strong>' + esc(next.displayTitle || next.title) + "</strong> · " + tr("about {n} min", { n: next.durationMin }) +
-    (next.time ? " · " + next.time : "") + (firstStep ? "<br><span style='color:var(--ink-3)'>" + esc(firstStep) + "</span>" : "") + '<button data-un="' + next.id + '">' + tr("Start") + '</button>';
+    (next.time ? " · " + next.time : "") + (firstStep ? '<span class="un-step">' + esc(firstStep) + "</span>" : "") + '<button data-un="' + next.id + '"' + (firstStep ? ' class="un-start"' : "") + ">" + tr("Start") + '</button>';
   el.querySelector("[data-un]").addEventListener("click", function () {
     var t = baseTask(next.id); if (t) { t.status = "doing"; save(); refreshAll(); toast(tr("Started. One step at a time.")); }
   });
