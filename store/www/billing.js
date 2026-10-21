@@ -116,7 +116,19 @@
       var cur = off && (off.current || off);
       var pkgs = (cur && cur.availablePackages) || [];
       var out = {};
-      pkgs.forEach(function (p) { var pr = p.product || {}; if (pr.identifier && pr.priceString) out[pr.identifier] = pr.priceString; });
+      pkgs.forEach(function (p) {
+        var pr = p.product || {}; if (!pr.identifier || !pr.priceString) return;
+        // POLAR P2 (21 Oct, device): a bare "$3.99" names no
+        // currency — on a US-storefront device it sat beside
+        // copy quoting A$ anchors and the two disagreed. Label
+        // any price string that does not already identify its
+        // currency (no letter, no €/£) with the store's own
+        // currency code: "$3.99" -> "$3.99 USD". Strings that
+        // already speak (A$4.99, 4,99 €) pass through whole.
+        var s = String(pr.priceString);
+        if (pr.currencyCode && !/[A-Za-z€£]/.test(s)) s = s + " " + pr.currencyCode;
+        out[pr.identifier] = s;
+      });
       return Object.keys(out).length ? out : null;
     }).catch(function () { return null; });
   }

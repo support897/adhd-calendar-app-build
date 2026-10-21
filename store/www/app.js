@@ -855,6 +855,17 @@ function toggleVoice(hooks) {
   var btn = hooks.btn, span = btn.querySelector("span");
   var done = function () { voiceSession = null; if (span) span.textContent = tr("Speak"); };
   var nat = nativeSpeech();
+  if (!nat) {
+    // POLAR P1 hardening (21 Oct): on the packaged app with the
+    // speech plugin missing from the build (build 20's conveyor
+    // hole — the plugin was named in config but never compiled
+    // in), the flow used to fall through to the WebView's web
+    // speech, which errors not-allowed and accuses the user's
+    // mic settings — wrongly. On native, no plugin means the
+    // BUILD lacks voice: say that, honestly, and stop.
+    var C2 = window.Capacitor;
+    if (C2 && typeof C2.isNativePlatform === "function" && C2.isNativePlatform()) { hooks.msg(tr("Voice is not in this build of the app. Typing works the same — your words land in the same place.")); return; }
+  }
   if (nat) {
     var stopped = false;
     voiceSession = { stop: function () { stopped = true; try { nat.stop(); } catch (e) {} done(); } };
@@ -997,6 +1008,8 @@ function renderTodos() {
 }
 function submitTodoInput() {
   if (addTodo($("todoInput").value)) { $("todoInput").value = ""; save(); renderTodos(); }
+  // POLAR P4: a blank add was a silent no-op — say so.
+  else toast(tr("Type the thing first, then tap +."));
 }
 $("todoAddBtn").addEventListener("click", submitTodoInput);
 $("todoInput").addEventListener("keydown", function (e) { if (e.key === "Enter") submitTodoInput(); });
@@ -1471,7 +1484,12 @@ var GUIDE_STEPS = [
    the menu stop (the card docks beside the open menu); then
    the app's areas; last stop Done. The X or "Skip tour"
    closes it any time; it runs on the first visit only. */
-function tourNeedsName() { return !!(ACTIVE_UID && FB.configured && !(state.settings.profileName || "").trim()); }
+// POLAR P7 (21 Oct, fresh install): the name ask belongs to
+// the TOUR, not to the account — a guest's tour never asked
+// (this used to require a signed-in uid), so a fresh install
+// crossed all five cards nameless. The name lives in state
+// and syncs on sign-in like everything else.
+function tourNeedsName() { return !((state.settings.profileName || "").trim()); }
 var TOUR = [];
 function buildTour() {
   TOUR = [];
@@ -1638,9 +1656,19 @@ function renderPlans() {
   else st.textContent = tr("Pick a plan to unlock everything.");
   PaceBilling.storePrices().then(function (p) {
     if (!p) return;
-    $("buyMonthly").textContent = tr("Plus, monthly") + " — " + (p[PaceBilling.products.monthly] || "A$4.99");
-    $("buyYearly").textContent = tr("Plus, yearly") + " — " + (p[PaceBilling.products.yearly] || "A$39.99");
-    $("buyLifetime").textContent = tr("Plus for life") + " — " + (p[PaceBilling.products.lifetime] || "A$99.99");
+    var pm = p[PaceBilling.products.monthly], py = p[PaceBilling.products.yearly], pl = p[PaceBilling.products.lifetime];
+    $("buyMonthly").textContent = tr("Plus, monthly") + " — " + (pm || "A$4.99");
+    $("buyYearly").textContent = tr("Plus, yearly") + " — " + (py || "A$39.99");
+    $("buyLifetime").textContent = tr("Plus for life") + " — " + (pl || "A$99.99");
+    // POLAR P2: the copy lines speak the SAME store prices as
+    // the buttons (never the A$ anchors beside live store
+    // numbers). Only overwrite when the store answered for
+    // that product; the static anchors stand otherwise.
+    if (pm && py) {
+      var pp = $("planPriceLine"); if (pp) pp.textContent = tr("{m} a month, or {y} a year. First month free.", { m: pm, y: py });
+      var xp = $("plusPriceLine"); if (xp) xp.textContent = tr("Plus is {m} a month, or {y} a year. Your first month is free.", { m: pm, y: py });
+    }
+    if (pl) { var lp = $("planLifeLine"); if (lp) lp.textContent = tr("Or Plus for life: {l}, once.", { l: pl }); }
   }).catch(function () {});
 }
 function buyFlow(productId) {
@@ -2173,7 +2201,17 @@ function bindAccounts() {
             .catch(function (e) { authBusy(tr(FB.userError(e))); });
         },
       });
-      window.google.accounts.id.prompt();
+      // The moment listener (the door chapter, 21 Oct): a GSI
+      // prompt that never displays — blocked popup, suppressed
+      // One Tap, a dismissed sheet — used to leave "Opening
+      // Google…" hanging forever, the filmed fleet failure in
+      // miniature. Every non-display moment now speaks.
+      window.google.accounts.id.prompt(function (n) {
+        try {
+          if (n && (n.isNotDisplayed() || n.isSkippedMoment())) authBusy(tr("Google did not answer. Nothing changed. Try again, or use email + password."));
+          else if (n && n.isDismissedMoment()) authBusy(tr("Google sign-in was closed. Nothing changed."));
+        } catch (e) {}
+      });
     };
     if (window.google && window.google.accounts) go();
     else {

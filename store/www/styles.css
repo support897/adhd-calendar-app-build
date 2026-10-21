@@ -152,6 +152,11 @@ html[data-photo="dark"] body::after { background: rgba(20,31,27,0.88); }
 .mini-btn { border: 1px solid var(--hair); background: none; color: var(--ink-2); border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 500; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+/* NO-ZOOM LAW (21 Oct — a double tap zoomed the app
+   huge on device): a double tap must never zoom. manipulation
+   touch-action disables the double-tap gesture (and its delay)
+   while keeping pan + taps; the viewport meta bars scaling. */
+html { touch-action: manipulation; }
 html, body { margin: 0; padding: 0; }
 body {
   font-family: var(--font-ui);
@@ -526,7 +531,15 @@ html[data-cute="1"] .add-btn { border-radius: 16px; }
    close button) brings the full content back. Hidden on every
    load still; opening is per session, from the floating mark. */
 @media (max-width: 700px) {
-  #sidebar { width: min(84vw, 340px); padding: calc(18px + var(--sat)) 14px calc(18px + var(--sab)); }
+  /* POLAR P8 (21 Oct, device): the in-flow sidebar squeezed
+     #main into the leftover strip on phone widths — the
+     calendar reflowed into ~62px, one word per line. The
+     ruling's shape is an OVERLAY: the menu floats over the
+     full-width content (the visible right strip is the
+     sliver you tap to close), so on phone the sidebar is
+     fixed and #app stops flexing. */
+  #app { display: block; }
+  #sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 46; overflow-y: auto; box-shadow: 0 0 44px rgba(20, 31, 27, 0.22); width: min(84vw, 340px); padding: calc(18px + var(--sat)) 14px calc(18px + var(--sab)); }
   html:not([data-sb="collapsed"]) #sbSliver {
     display: block; position: fixed; top: 0; right: 0; bottom: 0;
     width: calc(100vw - min(84vw, 340px)); z-index: 45; cursor: pointer;
