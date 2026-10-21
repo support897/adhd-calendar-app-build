@@ -1,0 +1,83 @@
+# Pace simulator drive v1 — QA Tester chair.
+# Drives candidate 22's simulator copy: email door (the one button signs in
+# or makes the account) + a short journey (create -> sign out -> sign in ->
+# data stands). Screenshots land after every stage so a failed step is
+# diagnosable from the run artefact at QA's chair.
+# TEST_EMAIL / TEST_PASSWORD arrive as workflow env from the repo secret
+# QA_PACE_TEST_PASSWORD + the tester alias of record; the values never
+# appear in this file or the repo.
+appId: shop.ilseplacencia.pace
+---
+- launchApp:
+    clearState: true
+- takeScreenshot: 00-launched
+- tapOn:
+    text: "Not now"
+    optional: true
+- takeScreenshot: 01-welcome-done
+- tapOn:
+    point: "8%, 10%"
+- takeScreenshot: 02-sidebar
+- tapOn:
+    text: "Sign in"
+- takeScreenshot: 03-auth-sheet
+- tapOn:
+    text: "you@example.com"
+- inputText: "${TEST_EMAIL}"
+- tapOn:
+    text: "Your password"
+- inputText: "${TEST_PASSWORD}"
+- hideKeyboard
+- takeScreenshot: 04-auth-filled
+- tapOn:
+    text: "Continue"
+- extendedWaitUntil:
+    visible:
+      text: "Sign out"
+    timeout: 60000
+- takeScreenshot: 05-signed-in
+- tapOn:
+    point: "8%, 10%"
+- takeScreenshot: 06-menu-closed
+- tapOn:
+    point: "37%, 26%"
+- takeScreenshot: 07-add-sheet
+- tapOn:
+    text: "e.g. Ring the plumber tomorrow at 9am for 30 minutes"
+- inputText: "Sim drive task one"
+- hideKeyboard
+- tapOn:
+    text: "Add task"
+- assertVisible:
+    text: "Sim drive task one"
+- takeScreenshot: 08-task-created
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Sign out"
+- extendedWaitUntil:
+    visible:
+      text: "Sign in"
+    timeout: 30000
+- takeScreenshot: 09-signed-out
+- tapOn:
+    text: "Sign in"
+- tapOn:
+    text: "you@example.com"
+- inputText: "${TEST_EMAIL}"
+- tapOn:
+    text: "Your password"
+- inputText: "${TEST_PASSWORD}"
+- hideKeyboard
+- tapOn:
+    text: "Continue"
+- extendedWaitUntil:
+    visible:
+      text: "Sign out"
+    timeout: 60000
+- takeScreenshot: 10-relogin
+- tapOn:
+    point: "8%, 10%"
+- assertVisible:
+    text: "Sim drive task one"
+- takeScreenshot: 11-task-stands
