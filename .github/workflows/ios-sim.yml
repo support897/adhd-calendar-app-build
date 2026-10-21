@@ -1,0 +1,79 @@
+name: iOS Simulator Copy (Pace)
+
+# Manual run only. Builds an UNSIGNED simulator copy of the SAME tree the
+# device workflow ships (candidate 22's source), boots a simulator on the
+# runner, installs + cold-launches the copy, and captures a first-open
+# screenshot of the door. Test lane only: proves nothing about the real
+# phone door; the device build + ios-ipa.yml are untouched by this file.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sim:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies and sync iOS
+        working-directory: store
+        run: |
+          npm ci
+          npx cap sync ios
+
+      - name: Build the simulator copy (no signing)
+        working-directory: store
+        run: |
+          xcodebuild build \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath "$RUNNER_TEMP/sim-build" \
+            CODE_SIGNING_ALLOWED=NO
+          find "$RUNNER_TEMP/sim-build/Build/Products" -maxdepth 2 -name "*.app" -print
+
+      - name: Boot a simulator, install, cold-launch, screenshot the door
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find "$RUNNER_TEMP/sim-build/Build/Products" -maxdepth 2 -name "App.app" | head -1)
+          echo "App: $APP_PATH"
+          UDID=$(python3 - <<'PY'
+          import json, subprocess
+          data = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "-j", "devices", "available"]))
+          best = None
+          for runtime, devs in data["devices"].items():
+              if "iOS" not in runtime:
+                  continue
+              for d in devs:
+                  if d["name"].startswith("iPhone") and d.get("isAvailable", True):
+                      ver = runtime.rsplit("-", 1)[-1]
+                      if best is None or ver > best[0]:
+                          best = (ver, d["udid"], d["name"])
+          print(best[1])
+          PY
+          )
+          echo "Simulator: $UDID"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install booted "$APP_PATH"
+          xcrun simctl launch booted shop.ilseplacencia.pace
+          sleep 8
+          xcrun simctl io booted screenshot "$RUNNER_TEMP/pace-first-open.png"
+          ls -la "$RUNNER_TEMP/pace-first-open.png"
+          cd "$RUNNER_TEMP/sim-build/Build/Products/Debug-iphonesimulator"
+          ditto -c -k --sequesterRsrc --keepParent App.app "$RUNNER_TEMP/pace-sim-app.zip"
+          ls -la "$RUNNER_TEMP/pace-sim-app.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pace-sim-copy
+          path: |
+            ${{ runner.temp }}/pace-sim-app.zip
+            ${{ runner.temp }}/pace-first-open.png
+          if-no-files-found: error
+          retention-days: 30
