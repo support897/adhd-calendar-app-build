@@ -31,7 +31,7 @@ jobs:
           xcodebuild build \
             -project ios/App/App.xcodeproj \
             -scheme App \
-            -configuration Debug \
+            -configuration Release \
             -destination "generic/platform=iOS Simulator" \
             -derivedDataPath "$RUNNER_TEMP/sim-build" \
             CODE_SIGNING_ALLOWED=NO
@@ -65,7 +65,7 @@ jobs:
           sleep 8
           xcrun simctl io booted screenshot "$RUNNER_TEMP/pace-first-open.png"
           ls -la "$RUNNER_TEMP/pace-first-open.png"
-          cd "$RUNNER_TEMP/sim-build/Build/Products/Debug-iphonesimulator"
+          cd "$RUNNER_TEMP/sim-build/Build/Products/Release-iphonesimulator"
           ditto -c -k --sequesterRsrc --keepParent App.app "$RUNNER_TEMP/pace-sim-app.zip"
           ls -la "$RUNNER_TEMP/pace-sim-app.zip"
 
