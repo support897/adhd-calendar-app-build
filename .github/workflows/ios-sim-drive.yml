@@ -108,7 +108,11 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/drive-record"
           find "$HOME/.maestro" -name "*.png" -exec cp {} "$RUNNER_TEMP/drive-record/" \; 2>/dev/null || true
-          find "$HOME/.maestro" -name "*.json" -exec cp {} "$RUNNER_TEMP/drive-record/" \; 2>/dev/null || true
+          # Step records only (hierarchy dumps). commands.json is NEVER
+          # collected: Maestro records the drive env (incl. the tester
+          # password) in plaintext in it — v1's artefact carried it and
+          # the value had to be treated as burnt (QA, 22 Oct).
+          find "$HOME/.maestro" -name "step-*.json" -exec cp {} "$RUNNER_TEMP/drive-record/" \; 2>/dev/null || true
           xcrun simctl io booted screenshot "$RUNNER_TEMP/drive-record/final-frame.png" || true
           ls -la "$RUNNER_TEMP/drive-record/" || true
 
