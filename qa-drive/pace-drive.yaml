@@ -1,28 +1,45 @@
-# Pace simulator drive v1 — QA Tester chair.
-# Drives candidate 22's simulator copy: email door (the one button signs in
-# or makes the account) + a short journey (create -> sign out -> sign in ->
-# data stands). Screenshots land after every stage so a failed step is
-# diagnosable from the run artefact at QA's chair.
-# TEST_EMAIL / TEST_PASSWORD arrive as workflow env from the repo secret
-# QA_PACE_TEST_PASSWORD + the tester alias of record; the values never
-# appear in this file or the repo.
+# Pace simulator drive v2 — QA Tester chair.
+# v2 changes from v1's own run record (run 39638113168, FAILED at the
+# Welcome sheet): v1's optional "Not now" tap fired before the sheet
+# settled (step status WARNED; the sheet stands untouched in the
+# failure frame). v2 WAITS for the sheet, taps non-optionally, and
+# proves the sheet is gone before touching anything behind it. Every
+# later tap waits until its target is visible.
+# Drives candidate 22's simulator copy: email door (the one button
+# signs in or makes the account) + a short journey (create -> sign
+# out -> sign in -> data stands). Screenshots land after every stage.
+# TEST_EMAIL / TEST_PASSWORD arrive as workflow env from the repo
+# secret QA_PACE_TEST_PASSWORD + the tester alias of record; the
+# values never appear in this file or the repo. NOTE: Maestro's
+# commands.json records env values in plaintext — the workflow's
+# collect step must NOT upload commands.json (see ios-sim-drive.yml).
 appId: shop.ilseplacencia.pace
 ---
 - launchApp:
     clearState: true
+- extendedWaitUntil:
+    visible:
+      text: "Welcome to Pace Calendar"
+    timeout: 90000
 - takeScreenshot: 00-launched
 - tapOn:
     text: "Not now"
-    optional: true
+    waitUntilVisible: true
+- extendedWaitUntil:
+    notVisible:
+      text: "Welcome to Pace Calendar"
+    timeout: 30000
 - takeScreenshot: 01-welcome-done
 - tapOn:
     point: "8%, 10%"
 - takeScreenshot: 02-sidebar
 - tapOn:
     text: "Sign in"
+    waitUntilVisible: true
 - takeScreenshot: 03-auth-sheet
 - tapOn:
     text: "you@example.com"
+    waitUntilVisible: true
 - inputText: "${TEST_EMAIL}"
 - tapOn:
     text: "Your password"
@@ -31,6 +48,7 @@ appId: shop.ilseplacencia.pace
 - takeScreenshot: 04-auth-filled
 - tapOn:
     text: "Continue"
+    waitUntilVisible: true
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -44,10 +62,12 @@ appId: shop.ilseplacencia.pace
 - takeScreenshot: 07-add-sheet
 - tapOn:
     text: "e.g. Ring the plumber tomorrow at 9am for 30 minutes"
+    waitUntilVisible: true
 - inputText: "Sim drive task one"
 - hideKeyboard
 - tapOn:
     text: "Add task"
+    waitUntilVisible: true
 - assertVisible:
     text: "Sim drive task one"
 - takeScreenshot: 08-task-created
@@ -55,6 +75,7 @@ appId: shop.ilseplacencia.pace
     point: "8%, 10%"
 - tapOn:
     text: "Sign out"
+    waitUntilVisible: true
 - extendedWaitUntil:
     visible:
       text: "Sign in"
@@ -62,8 +83,10 @@ appId: shop.ilseplacencia.pace
 - takeScreenshot: 09-signed-out
 - tapOn:
     text: "Sign in"
+    waitUntilVisible: true
 - tapOn:
     text: "you@example.com"
+    waitUntilVisible: true
 - inputText: "${TEST_EMAIL}"
 - tapOn:
     text: "Your password"
@@ -71,6 +94,7 @@ appId: shop.ilseplacencia.pace
 - hideKeyboard
 - tapOn:
     text: "Continue"
+    waitUntilVisible: true
 - extendedWaitUntil:
     visible:
       text: "Sign out"
