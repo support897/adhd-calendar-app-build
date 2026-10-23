@@ -1,4 +1,17 @@
-# Pace simulator drive v7 — QA Tester chair.
+# Pace simulator drive v8 — QA Tester chair.
+# v8 (2026-10-23) — v7 FAILED-INSTRUMENT at drive 7 (run
+# 39950662965, step-016 scrollUntilVisible "Account"): frame
+# 02-sidebar stands with the sidebar open and "Settings"
+# rendered, and the failure tree holds the CALENDAR ALONE — the
+# Settings tap's sheet never stood (a sidebar-tap race; the
+# same leg passed on drive 5). v8 cures structurally at both
+# sidebar entries: the Settings tap gains retryTapIfNoChange,
+# and the sheet must PROVE it stands — by its first group
+# heading "How it looks" (sheet-only text, read from build
+# 22's packaged markup) — before any scroll; a conditional
+# recovery re-opens the sidebar ("Show the menu", the toggle's
+# tree name from the failure hierarchy) and taps Settings
+# again when the proof does not stand. v7: 9,599 B.
 # v7 (2026-10-23) — v6 FAILED-INSTRUMENT at run 39948569251,
 # step-030, the first signed-in proof wait ("Sign out"). PROGRESS:
 # the v6 door cure HELD WHOLE — email landed, the arrow advance
@@ -117,6 +130,28 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Settings"
     waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
+# SHEET-STANDING PROOF + RECOVERY (drive 7): the Settings sheet
+# is PROVEN standing by its first group heading before any
+# scroll — "How it looks" (sheet-only text, read from build
+# 22's packaged markup). If it does not stand, the sidebar is
+# re-opened and Settings tapped again; the proof then judges.
+- runFlow:
+    when:
+      notVisible: "How it looks"
+    commands:
+      - tapOn:
+          text: "Show the menu"
+          waitUntilVisible: true
+      - tapOn:
+          text: "Settings"
+          waitUntilVisible: true
+      - waitForAnimationToEnd
+- extendedWaitUntil:
+    visible:
+      text: "How it looks"
+    timeout: 60000
 - scrollUntilVisible:
     element:
       text: "Account"
@@ -194,6 +229,28 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Settings"
     waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
+# SHEET-STANDING PROOF + RECOVERY (drive 7): the Settings sheet
+# is PROVEN standing by its first group heading before any
+# scroll — "How it looks" (sheet-only text, read from build
+# 22's packaged markup). If it does not stand, the sidebar is
+# re-opened and Settings tapped again; the proof then judges.
+- runFlow:
+    when:
+      notVisible: "How it looks"
+    commands:
+      - tapOn:
+          text: "Show the menu"
+          waitUntilVisible: true
+      - tapOn:
+          text: "Settings"
+          waitUntilVisible: true
+      - waitForAnimationToEnd
+- extendedWaitUntil:
+    visible:
+      text: "How it looks"
+    timeout: 60000
 - scrollUntilVisible:
     element:
       text: "Sign out"
