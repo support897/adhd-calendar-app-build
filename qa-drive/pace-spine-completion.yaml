@@ -1,4 +1,12 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v5 (2026-10-23) — mirrors pace-drive v5's proven cures BEFORE its
+# first dispatch: scrollUntilVisible for the entry "Account" wait
+# and for both "Sign out" legs (the v4 main drive's step-016
+# lesson: Pace's Settings tree holds only rendered content; the
+# account group lives below the fold) + the fleet hideKeyboard
+# cure (4 sites). The standing gate holds: this flow dispatches
+# only behind a CLEAN main drive, and its final leg was re-read
+# against the main drive's frames at the v4 splice.
 # Runs AFTER the main drive (pace-drive.yaml v3) lands clean on the
 # same sim copy. Covers the spine legs the single-account drive does
 # not: account B's own journey + TWO-WAY isolation against account A.
@@ -54,10 +62,11 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Settings"
     waitUntilVisible: true
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       text: "Account"
-    timeout: 30000
+    direction: DOWN
+    timeout: 60000
 - takeScreenshot: 02b-settings-account
 - tapOn:
     text: "Sign in"
@@ -70,7 +79,8 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Your password"
 - inputText: "${TEST_PASSWORD2}"
-- hideKeyboard
+- tapOn:
+    point: "90%, 62%"
 - takeScreenshot: 04-auth-filled-b
 - tapOn:
     text: "Continue"
@@ -90,7 +100,8 @@ appId: shop.ilseplacencia.pace
     text: "e.g. Ring the plumber tomorrow at 9am for 30 minutes"
     waitUntilVisible: true
 - inputText: "Sim drive task B"
-- hideKeyboard
+- tapOn:
+    point: "90%, 62%"
 - tapOn:
     text: "Add task"
     waitUntilVisible: true
@@ -105,6 +116,11 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Settings"
     waitUntilVisible: true
+- scrollUntilVisible:
+    element:
+      text: "Sign out"
+    direction: DOWN
+    timeout: 60000
 - tapOn:
     text: "Sign out"
     waitUntilVisible: true
@@ -123,7 +139,8 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Your password"
 - inputText: "${TEST_PASSWORD}"
-- hideKeyboard
+- tapOn:
+    point: "90%, 62%"
 - tapOn:
     text: "Continue"
     waitUntilVisible: true
@@ -146,6 +163,11 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Settings"
     waitUntilVisible: true
+- scrollUntilVisible:
+    element:
+      text: "Sign out"
+    direction: DOWN
+    timeout: 60000
 - tapOn:
     text: "Sign out"
     waitUntilVisible: true
@@ -163,7 +185,8 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Your password"
 - inputText: "${TEST_PASSWORD2}"
-- hideKeyboard
+- tapOn:
+    point: "90%, 62%"
 - tapOn:
     text: "Continue"
     waitUntilVisible: true
