@@ -1,4 +1,7 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v17 (2026-10-24) — carries pace-drive v17's markup-read
+# add leg (drive 15: the signed-in header's add button, the
+# page re-entering scrolled, the field's aria name).
 # v16 (2026-10-24) — carries pace-drive v16's proven
 # menu-close (drive 14's open-sidebar frame) at both of this
 # file's journey sites.
@@ -265,11 +268,28 @@ appId: shop.ilseplacencia.pace
           point: "93%, 50%"
       - waitForAnimationToEnd
 - takeScreenshot: 06-menu-closed-b
+# ADD, FROM THE MARKUP (drive 15, run 39966566227): v16's
+# close landed whole — 06 stands with the calendar exposed —
+# but the (37%, 26%) point was measured on the FIRST-RUN
+# layout. The signed-in month view carries its add button
+# (#addBtn, aria-label "Add a task") in the header, and the
+# page re-enters SCROLLED, the header above the viewport;
+# the old point selected a date (07 stands on Tuesday 6).
+# Two DOWN swipes return the page to its top (transport);
+# the button is tapped by its aria name; the field by ITS
+# aria name — "Say it in one sentence"; the placeholder is
+# not the input's tree name.
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 - tapOn:
-    point: "37%, 26%"
+    text: "Add a task"
+    waitUntilVisible: true
 - takeScreenshot: 07-add-sheet-b
 - tapOn:
-    text: "e.g. Ring the plumber tomorrow at 9am for 30 minutes"
+    text: "Say it in one sentence"
     waitUntilVisible: true
 - inputText: "Sim drive task B"
 - tapOn:
