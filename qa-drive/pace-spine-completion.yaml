@@ -1,4 +1,7 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v16 (2026-10-24) — carries pace-drive v16's proven
+# menu-close (drive 14's open-sidebar frame) at both of this
+# file's journey sites.
 # v15 (2026-10-23) — carries pace-drive v15's tree-refresh
 # head (drive 13's cold-start tree lag; the refresh stands
 # before the first judge here too).
@@ -247,8 +250,20 @@ appId: shop.ilseplacencia.pace
     visible:
       text: "Bad"
     timeout: 30000
-- tapOn:
-    point: "8%, 10%"
+# MENU-CLOSE, PROVEN (drive 14, run 39965456221): the second
+# blind toggle tap did NOT close the menu — frame 06 shows the
+# sidebar standing OPEN (its header covers the toggle's point,
+# so the tap was spent on the header), and the add tap then
+# fired into the sidebar's surface. The close is now
+# conditional on a sidebar-only item standing, and lands on
+# the content sliver, which this app answers by closing.
+- runFlow:
+    when:
+      visible: "Progress"
+    commands:
+      - tapOn:
+          point: "93%, 50%"
+      - waitForAnimationToEnd
 - takeScreenshot: 06-menu-closed-b
 - tapOn:
     point: "37%, 26%"
@@ -401,8 +416,20 @@ appId: shop.ilseplacencia.pace
     visible:
       text: "Bad"
     timeout: 30000
-- tapOn:
-    point: "8%, 10%"
+# MENU-CLOSE, PROVEN (drive 14, run 39965456221): the second
+# blind toggle tap did NOT close the menu — frame 06 shows the
+# sidebar standing OPEN (its header covers the toggle's point,
+# so the tap was spent on the header), and the add tap then
+# fired into the sidebar's surface. The close is now
+# conditional on a sidebar-only item standing, and lands on
+# the content sliver, which this app answers by closing.
+- runFlow:
+    when:
+      visible: "Progress"
+    commands:
+      - tapOn:
+          point: "93%, 50%"
+      - waitForAnimationToEnd
 - assertVisible:
     text: "Sim drive task one"
 - assertNotVisible:
