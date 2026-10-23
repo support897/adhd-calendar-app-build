@@ -1,4 +1,12 @@
 # Pace simulator drive v9 — QA Tester chair.
+# v15 (2026-10-23) — drive 13 (run 39963582655) died at the
+# flow's FIRST command: the welcome sheet stood painted in the
+# final frame while the tree never delivered its heading for
+# the wait's whole ~85 s (SU's job-log read: launch completed,
+# the assert's line and the failure header are the whole
+# story). Tree lag at cold start. v15 puts the tree-refresh
+# before the first judge in both files: settle, one UP swipe,
+# a conditional second refresh, then the judge.
 # v14 (2026-10-23) — drive 12 (run 39960463742) travelled the
 # furthest yet (02b · 03 · 04 all standing, the sign-in fired)
 # and died at step-041, the "How it looks" proof on the
@@ -167,6 +175,23 @@ appId: shop.ilseplacencia.pace
 ---
 - launchApp:
     clearState: true
+# TREE-REFRESH BEFORE THE FIRST JUDGE (drive 13, run 39963582655):
+# the sheet stood PAINTED in the final frame while the tree never
+# delivered its heading for the first wait's whole ~85 s — tree lag
+# at cold start, Ruefly 6's blindness at the first surface. A
+# gesture rebuilds the snapshot; the recovery repeats it once if
+# the heading still does not stand; only then does the judge run.
+- waitForAnimationToEnd
+- swipe:
+    direction: UP
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      notVisible: "Welcome to Pace Calendar"
+    commands:
+      - swipe:
+          direction: UP
+      - waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Welcome to Pace Calendar"
