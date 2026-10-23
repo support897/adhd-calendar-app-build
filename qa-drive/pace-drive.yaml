@@ -1,4 +1,11 @@
 # Pace simulator drive v9 — QA Tester chair.
+# v11 (2026-10-23) — the FULL-NODE MATCHING completion (class
+# proven on Fit drive 4 the same hour): the tour-skip blocks'
+# notVisible targets carry Skip's complete heading "Ahoy! I'm
+# Skip. Welcome aboard! What's your name?" (from drive 8's
+# failure frame), so the skip proof is real instead of vacuous.
+# v10's relocated proofs stand. v10: main 14,807 B, completion
+# 13,787 B.
 # v10 (2026-10-23) — v9 FAILED-INSTRUMENT at drive 9 (run
 # 39954918760, step-039) AND EXPOSED THE OLDEST FLOW FAULT OF
 # THE LANE: with both modals handled, the failure frame stands
@@ -240,7 +247,7 @@ appId: shop.ilseplacencia.pace
           retryTapIfNoChange: true
       - extendedWaitUntil:
           notVisible:
-            text: "What's your name?"
+            text: "Ahoy! I'm Skip. Welcome aboard! What's your name?"
           timeout: 30000
 - tapOn:
     point: "8%, 10%"
@@ -377,7 +384,7 @@ appId: shop.ilseplacencia.pace
           retryTapIfNoChange: true
       - extendedWaitUntil:
           notVisible:
-            text: "What's your name?"
+            text: "Ahoy! I'm Skip. Welcome aboard! What's your name?"
           timeout: 30000
 - tapOn:
     point: "8%, 10%"
