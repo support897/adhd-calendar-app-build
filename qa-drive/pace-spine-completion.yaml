@@ -1,4 +1,8 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v7 (2026-10-23) — mirrors pace-drive v7's first-entry welcome
+# dismissal (drive 6's proof: the Welcome sheet re-stands inside
+# after a fresh account's first entry) at its three Continue sites
+# BEFORE its first dispatch. v6: 7,015 B.
 # v6 (2026-10-23) — mirrors pace-drive v6's door cure BEFORE its
 # first dispatch (the completion flow has never run; its three
 # door legs carried the same inherited missing-advance shape that
@@ -105,6 +109,21 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Continue"
     waitUntilVisible: true
+# FIRST-ENTRY WELCOME (drive 6): the "Welcome to Pace Calendar"
+# sheet stands AGAIN inside after a fresh account's first entry
+# (the notifications ask) — modal over the calendar, and the
+# "Sign out" proof waits behind it. Dismiss it whenever it stands.
+- runFlow:
+    when:
+      visible: "Welcome to Pace Calendar"
+    commands:
+      - tapOn:
+          text: "Not now"
+          waitUntilVisible: true
+      - extendedWaitUntil:
+          notVisible:
+            text: "Welcome to Pace Calendar"
+          timeout: 30000
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -175,6 +194,21 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Continue"
     waitUntilVisible: true
+# FIRST-ENTRY WELCOME (drive 6): the "Welcome to Pace Calendar"
+# sheet stands AGAIN inside after a fresh account's first entry
+# (the notifications ask) — modal over the calendar, and the
+# "Sign out" proof waits behind it. Dismiss it whenever it stands.
+- runFlow:
+    when:
+      visible: "Welcome to Pace Calendar"
+    commands:
+      - tapOn:
+          text: "Not now"
+          waitUntilVisible: true
+      - extendedWaitUntil:
+          notVisible:
+            text: "Welcome to Pace Calendar"
+          timeout: 30000
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -232,6 +266,21 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Continue"
     waitUntilVisible: true
+# FIRST-ENTRY WELCOME (drive 6): the "Welcome to Pace Calendar"
+# sheet stands AGAIN inside after a fresh account's first entry
+# (the notifications ask) — modal over the calendar, and the
+# "Sign out" proof waits behind it. Dismiss it whenever it stands.
+- runFlow:
+    when:
+      visible: "Welcome to Pace Calendar"
+    commands:
+      - tapOn:
+          text: "Not now"
+          waitUntilVisible: true
+      - extendedWaitUntil:
+          notVisible:
+            text: "Welcome to Pace Calendar"
+          timeout: 30000
 - extendedWaitUntil:
     visible:
       text: "Sign out"
