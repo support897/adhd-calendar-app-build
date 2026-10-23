@@ -715,8 +715,21 @@ appId: shop.ilseplacencia.pace
     visible:
       text: "Sign out"
     timeout: 60000
-- tapOn:
-    point: "8%, 10%"
+# COMPLETION DRIVE 4 (run 39988243363) died HERE, at step-210:
+# the blind toggle tap before this assert assumed the sidebar
+# stood OPEN — it stood SHUT, so the tap OPENED it, and the
+# assert hunted B's task under the open menu (the failure frame
+# is the menu itself). TOGGLE-POINT STATE INVALIDATION, third
+# recurrence in this app: the close is conditional on the
+# sidebar-only marker, the v16 shape — keyed on "Progress",
+# closed by the content sliver.
+- runFlow:
+    when:
+      visible: "Progress"
+    commands:
+      - tapOn:
+          point: "93%, 50%"
+      - waitForAnimationToEnd
 - assertVisible:
     text: "Sim drive task B"
 - takeScreenshot: 13-b-task-stands
