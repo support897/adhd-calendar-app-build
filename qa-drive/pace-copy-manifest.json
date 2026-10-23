@@ -1,0 +1,18 @@
+{
+  "app": "Pace",
+  "candidate": "build 22",
+  "bundleId": "shop.ilseplacencia.pace",
+  "version": "1.0.0",
+  "bridgeRepo": "support897/adhd-calendar-app-build",
+  "bridgeCommit": "dc7fbf45081237d94a564dd93cc7c4f4ce219160",
+  "copyRunId": 39608338150,
+  "copyWorkflow": "ios-sim.yml",
+  "artefactName": "pace-sim-copy",
+  "artefactId": 12349114131,
+  "artefactBytes": 21324883,
+  "artefactSha256": "66bebaf8e462453422823e3f183d98403476ff589fe6c60a7737e9c035dcc9a9",
+  "appZipEntry": "pace-sim-app.zip",
+  "appZipBytes": 21339749,
+  "appZipSha256": "1a14f4ff0f3a9fe1cdb074f70979e1ab9675e1713b12196145f09db827bc52a2",
+  "verifiedBy": "Store Uploads, 23 Oct 2026: artefact zip downloaded and hashed at SU's hand; its sha256 equals the GitHub API digest of record; the Info.plist inside the app zip reads shop.ilseplacencia.pace 1.0.0 (22); the inner app zip's sha256 equals the copy held at builds/pace-sim/."
+}
