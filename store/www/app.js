@@ -2322,15 +2322,20 @@ function bindAccounts() {
     $("deleteMsg").textContent = tr("Checking it is you…");
     FB.emailSignIn(sess.email, pw).then(function () {
       $("deleteMsg").textContent = tr("Deleting…");
-      // The §6 sweep, in order (Security ruling, rules v2.2):
-      // state → spine → the aggregate shards → the Auth user.
-      // Erasure takes the shard: a uid-keyed row is the user's
-      // data however light its fields. aggSubs stays out — a
-      // payment-path record under its own retention policy.
+      // The §6 sweep, in order (Security ruling, rules v2.2;
+      // v2.4 fold): state → spine → the aggregate shards → the
+      // subscription record → the Auth user. Erasure takes the
+      // shard: a uid-keyed row is the user's data however light
+      // its fields. subscriptions/{uid} is inside the deletion
+      // promise (an access record, not the money ledger — the
+      // stores keep the money truth), so it dies here too.
+      // aggSubs stays out — the owner-space aggregate mirror,
+      // no client path exists to it.
       return FB.fsDelete(statePath())
         .then(function () { return FB.fsDelete(spinePath()); })
         .then(function () { return FB.fsDelete("aggSignups/" + sess.uid); })
-        .then(function () { return FB.fsDelete("aggImports/" + sess.uid); });
+        .then(function () { return FB.fsDelete("aggImports/" + sess.uid); })
+        .then(function () { return FB.fsDelete("subscriptions/" + sess.uid); });
     }).then(function () { return FB.deleteAccount(); })
       .then(function () {
         try { localStorage.removeItem(storeKey()); localStorage.removeItem("pace-last-uid"); } catch (e) {}
