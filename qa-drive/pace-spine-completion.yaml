@@ -1,4 +1,13 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v6 (2026-10-23) — mirrors pace-drive v6's door cure BEFORE its
+# first dispatch (the completion flow has never run; its three
+# door legs carried the same inherited missing-advance shape that
+# killed pace-drive v5 at step-022): focus-race hardening + the
+# typed-address landing proof + the "Next" arrow tap + the
+# password-step wait on all three door legs, and the door
+# password legs' accessory point taps removed under the amended
+# dismissal law. The dispatch gate is unchanged: a CLEAN main
+# drive (v6) + QA's gate word. v5: 5,741 B / 71 commands.
 # v5 (2026-10-23) — mirrors pace-drive v5's proven cures BEFORE its
 # first dispatch: scrollUntilVisible for the entry "Account" wait
 # and for both "Sign out" legs (the v4 main drive's step-016
@@ -75,12 +84,23 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "you@example.com"
     waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
 - inputText: "${TEST_EMAIL2}"
+- extendedWaitUntil:
+    visible:
+      text: "${TEST_EMAIL2}"
+    timeout: 15000
+- tapOn:
+    text: "Next"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Your password"
+    timeout: 30000
 - tapOn:
     text: "Your password"
 - inputText: "${TEST_PASSWORD2}"
-- tapOn:
-    point: "90%, 62%"
 - takeScreenshot: 04-auth-filled-b
 - tapOn:
     text: "Continue"
@@ -135,12 +155,23 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "you@example.com"
     waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
 - inputText: "${TEST_EMAIL}"
+- extendedWaitUntil:
+    visible:
+      text: "${TEST_EMAIL}"
+    timeout: 15000
+- tapOn:
+    text: "Next"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Your password"
+    timeout: 30000
 - tapOn:
     text: "Your password"
 - inputText: "${TEST_PASSWORD}"
-- tapOn:
-    point: "90%, 62%"
 - tapOn:
     text: "Continue"
     waitUntilVisible: true
@@ -181,12 +212,23 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "you@example.com"
     waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
 - inputText: "${TEST_EMAIL2}"
+- extendedWaitUntil:
+    visible:
+      text: "${TEST_EMAIL2}"
+    timeout: 15000
+- tapOn:
+    text: "Next"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Your password"
+    timeout: 30000
 - tapOn:
     text: "Your password"
 - inputText: "${TEST_PASSWORD2}"
-- tapOn:
-    point: "90%, 62%"
 - tapOn:
     text: "Continue"
     waitUntilVisible: true
