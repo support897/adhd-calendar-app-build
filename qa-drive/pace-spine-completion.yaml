@@ -46,6 +46,19 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     point: "8%, 10%"
 - takeScreenshot: 02-sidebar
+# v4 correction (drives v2+v3 both died at the bare sidebar "Sign in"
+# tap): build 22's sidebar carries NO sign-in item — proven from the
+# v3 failure frame + hierarchy (zero "Sign in" in tree) and from the
+# shipped markup: the account door lives in Settings (#accountGroup:
+# accountLine + the #accountOpen button labelled "Sign in").
+- tapOn:
+    text: "Settings"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Account"
+    timeout: 30000
+- takeScreenshot: 02b-settings-account
 - tapOn:
     text: "Sign in"
     waitUntilVisible: true
@@ -90,6 +103,9 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     point: "8%, 10%"
 - tapOn:
+    text: "Settings"
+    waitUntilVisible: true
+- tapOn:
     text: "Sign out"
     waitUntilVisible: true
 - extendedWaitUntil:
@@ -123,6 +139,13 @@ appId: shop.ilseplacencia.pace
 - assertNotVisible:
     text: "Sim drive task B"
 - takeScreenshot: 12-a-isolation
+# Sign-out rides the Settings route here too (v4 correction): the
+# point tap above opened the sidebar; "Sign out" stands in Settings'
+# account group, never in the sidebar. To be re-read against the v4
+# main drive's frames before this flow dispatches (its standing gate).
+- tapOn:
+    text: "Settings"
+    waitUntilVisible: true
 - tapOn:
     text: "Sign out"
     waitUntilVisible: true
