@@ -1,4 +1,8 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v18 (2026-10-24) — carries pace-drive v18's relocated
+# sign-in judges (drive 16: "Sign in" lives in Settings,
+# never on the guest calendar) at both of this file's
+# sign-out returns.
 # v17 (2026-10-24) — carries pace-drive v17's markup-read
 # add leg (drive 15: the signed-in header's add button, the
 # page re-entering scrolled, the field's aria name).
@@ -343,10 +347,52 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Sign out"
     waitUntilVisible: true
+# SIGN-IN LIVES IN SETTINGS (drive 16, run 39969161289): the
+# task was created (08 stands), the sign-out tap landed, and
+# the frame stands on the GUEST calendar — the app's own
+# signed-out home — where "Sign in" never stands. It waits in
+# Settings, in the Account group, the door proven at this
+# flow's first entry. The judge moves to the surface its
+# string lives on (the misplaced-proof law): route back
+# through Settings with the standing settle and sheet proof,
+# travel by swipes, and judge there.
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Settings"
+    waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      notVisible: "How it looks"
+    commands:
+      - tapOn:
+          text: "Show the menu"
+          waitUntilVisible: true
+      - tapOn:
+          text: "Settings"
+          waitUntilVisible: true
+      - waitForAnimationToEnd
+- extendedWaitUntil:
+    visible:
+      text: "How it looks"
+    timeout: 60000
+- repeat:
+    times: 6
+    commands:
+      - swipe:
+          direction: UP
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Sign in"
-    timeout: 30000
+    timeout: 60000
 - takeScreenshot: 10-signed-out-b
 - tapOn:
     text: "Sign in"
@@ -497,10 +543,52 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Sign out"
     waitUntilVisible: true
+# SIGN-IN LIVES IN SETTINGS (drive 16, run 39969161289): the
+# task was created (08 stands), the sign-out tap landed, and
+# the frame stands on the GUEST calendar — the app's own
+# signed-out home — where "Sign in" never stands. It waits in
+# Settings, in the Account group, the door proven at this
+# flow's first entry. The judge moves to the surface its
+# string lives on (the misplaced-proof law): route back
+# through Settings with the standing settle and sheet proof,
+# travel by swipes, and judge there.
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Settings"
+    waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      notVisible: "How it looks"
+    commands:
+      - tapOn:
+          text: "Show the menu"
+          waitUntilVisible: true
+      - tapOn:
+          text: "Settings"
+          waitUntilVisible: true
+      - waitForAnimationToEnd
+- extendedWaitUntil:
+    visible:
+      text: "How it looks"
+    timeout: 60000
+- repeat:
+    times: 6
+    commands:
+      - swipe:
+          direction: UP
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Sign in"
-    timeout: 30000
+    timeout: 60000
 - tapOn:
     text: "Sign in"
     waitUntilVisible: true
