@@ -1,4 +1,13 @@
 # Pace simulator drive v9 — QA Tester chair.
+# v17 (2026-10-24) — v16's PROVEN CLOSE LANDED on drive 15
+# (run 39966566227): 06 stands with the calendar exposed.
+# Death again at step-069 — but the add tap itself was the
+# stale part: its point was measured on the first-run layout,
+# while the signed-in month view keeps its add button in the
+# header (aria-label "Add a task") and re-enters scrolled,
+# the header above the viewport — the old point picked a
+# date. v17 scrolls to the top and taps the button and the
+# field by their aria names, all read from the shipped index.
 # v16 (2026-10-24) — v15's REFRESH LANDED on drive 14 (run
 # 39965456221): 00-launched stood, the whole door round trip
 # travelled (welcome, tour, Settings, sign-in, all framed),
@@ -377,11 +386,28 @@ appId: shop.ilseplacencia.pace
           point: "93%, 50%"
       - waitForAnimationToEnd
 - takeScreenshot: 06-menu-closed
+# ADD, FROM THE MARKUP (drive 15, run 39966566227): v16's
+# close landed whole — 06 stands with the calendar exposed —
+# but the (37%, 26%) point was measured on the FIRST-RUN
+# layout. The signed-in month view carries its add button
+# (#addBtn, aria-label "Add a task") in the header, and the
+# page re-enters SCROLLED, the header above the viewport;
+# the old point selected a date (07 stands on Tuesday 6).
+# Two DOWN swipes return the page to its top (transport);
+# the button is tapped by its aria name; the field by ITS
+# aria name — "Say it in one sentence"; the placeholder is
+# not the input's tree name.
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 - tapOn:
-    point: "37%, 26%"
+    text: "Add a task"
+    waitUntilVisible: true
 - takeScreenshot: 07-add-sheet
 - tapOn:
-    text: "e.g. Ring the plumber tomorrow at 9am for 30 minutes"
+    text: "Say it in one sentence"
     waitUntilVisible: true
 - inputText: "Sim drive task one"
 - tapOn:
