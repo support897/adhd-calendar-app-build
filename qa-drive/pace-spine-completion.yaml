@@ -715,24 +715,19 @@ appId: shop.ilseplacencia.pace
     visible:
       text: "Sign out"
     timeout: 60000
-# COMPLETION DRIVE 4 (run 39988243363) died HERE, at step-210:
-# the blind toggle tap before this assert assumed the sidebar
-# stood OPEN — it stood SHUT, so the tap OPENED it, and the
-# assert hunted B's task under the open menu (the failure frame
-# is the menu itself). TOGGLE-POINT STATE INVALIDATION, third
-# recurrence in this app: the close is conditional on the
-# sidebar-only marker, the v16 shape — keyed on "Progress",
-# closed by the content sliver.
-- runFlow:
-    when:
-      visible: "Progress"
-    commands:
-      - tapOn:
-          point: "93%, 50%"
-      - waitForAnimationToEnd
-- assertVisible:
-    text: "Sim drive task B"
-- takeScreenshot: 13-b-task-stands
+# COMPLETION DRIVES 4 + 5 (runs 39988243363 · 39992417542)
+# both died at step-210, this assert — and the two failure
+# frames together prove the assert itself stood on the WRONG
+# SURFACE: drive 4's frame is the open sidebar menu, drive 5's
+# is the Settings page signed in as B. At this point the flow
+# stands on Settings (the door lives there); B's task stands on
+# the CALENDAR, one navigation away, in every sidebar state.
+# MISPLACED PROOF, the law's plainest form: every proof names
+# the surface its string lives on. v24 moves the assert behind
+# the "Calendar" navigation + the page-top refresh, where the
+# task's UP NEXT strip renders. (v23's conditional close here
+# is removed: it returned the flow to Settings, the opposite
+# of what this leg needs.)
 - tapOn:
     point: "8%, 10%"
 - tapOn:
@@ -751,6 +746,9 @@ appId: shop.ilseplacencia.pace
 - swipe:
     direction: DOWN
 - waitForAnimationToEnd
+- assertVisible:
+    text: "Sim drive task B"
+- takeScreenshot: 13-b-task-stands
 - extendedWaitUntil:
     visible:
       text: "Bad"
