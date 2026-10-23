@@ -1,4 +1,14 @@
-# Pace simulator drive v2 — QA Tester chair.
+# Pace simulator drive v3 — QA Tester chair.
+# v3 change from v2's own run record (run 39938033876, FAILED at step
+# 011 "Sign in", INSTRUMENT): after the Welcome sheet is dismissed,
+# build 22 presents the Skip mascot TOUR (name step: "Ahoy! I'm Skip.
+# Welcome aboard! What's your name?" with "Skip tour" / "Next"). v2
+# had no tour leg, so the modal tour stood through the sidebar tap
+# and the "Sign in" tap failed behind it; the final frame shows the
+# tour untouched. v3 adds the tour leg immediately after the Welcome
+# dismissal: wait for "Skip tour", tap it, prove it is gone. Pace's
+# bytes were never charged — the app launched and rendered its
+# calendar + tour correctly in every frame.
 # v2 changes from v1's own run record (run 39638113168, FAILED at the
 # Welcome sheet): v1's optional "Not now" tap fired before the sheet
 # settled (step status WARNED; the sheet stands untouched in the
@@ -30,6 +40,18 @@ appId: shop.ilseplacencia.pace
       text: "Welcome to Pace Calendar"
     timeout: 30000
 - takeScreenshot: 01-welcome-done
+- extendedWaitUntil:
+    visible:
+      text: "Skip tour"
+    timeout: 30000
+- tapOn:
+    text: "Skip tour"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    notVisible:
+      text: "Skip tour"
+    timeout: 30000
+- takeScreenshot: 01b-tour-done
 - tapOn:
     point: "8%, 10%"
 - takeScreenshot: 02-sidebar
