@@ -1,4 +1,16 @@
 # Pace simulator drive v9 — QA Tester chair.
+# v13 (2026-10-23) — drive 11 (run 39958544549) travelled
+# clean to the Settings proof and died in its scroll: SU's log
+# read names it — scrollUntilVisible burned its full 60 s
+# demanding "Account" at 100% visibility on this sheet's
+# container and never landed it (the final frame stands only
+# ~1.5 screens down a ~3-screen page). The door-leg scroll of
+# the same form stands (proven since drive 5); the five
+# RELOCATED proof sites change transport: six plain UP swipes
+# (fast, deterministic travel) and the standing "Sign out"
+# wait judges the arrival. If the swipes undershoot somewhere,
+# that wait fails framed with the group in or out of view —
+# readable either way.
 # v12 (2026-10-23) — v10/v11 REFUSED AT VALIDATION on drive 10
 # (run 39957122289; SU's log read: "Config Field Required:
 # element at …:257:1", 11.5 s after invocation, the driver
@@ -270,10 +282,12 @@ appId: shop.ilseplacencia.pace
     visible:
       text: "How it looks"
     timeout: 30000
-- scrollUntilVisible:
-    element:
-      text: "Account"
-    direction: DOWN
+- repeat:
+    times: 6
+    commands:
+      - swipe:
+          direction: UP
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -409,10 +423,12 @@ appId: shop.ilseplacencia.pace
     visible:
       text: "How it looks"
     timeout: 30000
-- scrollUntilVisible:
-    element:
-      text: "Account"
-    direction: DOWN
+- repeat:
+    times: 6
+    commands:
+      - swipe:
+          direction: UP
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Sign out"
