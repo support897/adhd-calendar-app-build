@@ -1,4 +1,18 @@
-# Pace simulator drive v6 — QA Tester chair.
+# Pace simulator drive v7 — QA Tester chair.
+# v7 (2026-10-23) — v6 FAILED-INSTRUMENT at run 39948569251,
+# step-030, the first signed-in proof wait ("Sign out"). PROGRESS:
+# the v6 door cure HELD WHOLE — email landed, the arrow advance
+# worked, the password landed (04-auth-filled), Continue submitted
+# and the account was CREATED (the calendar stands in the failure
+# frame, feeling pills up). THE NEW SURFACE: Pace's "Welcome to
+# Pace Calendar" sheet stands AGAIN inside after a fresh account's
+# first entry (the notifications ask), modal over the calendar;
+# v6 modelled it as launch-only. v7 inserts a conditional welcome
+# dismissal after every Continue, before the signed-in proof.
+# SIDE PROOF FROM THE SAME RUN: the account drive 6 created takes
+# QA's cast password at REST — the repo secret holds the CURRENT
+# (rotated) value; the v1 re-seal ambiguity is RESOLVED, the
+# discriminator retires as answered (uid nq9IKJzq8G…). v6: 7,627 B.
 # v6 (2026-10-23) — v5 FAILED-INSTRUMENT at run 39946049867,
 # step-022 tapOn "Your password". PROGRESS FIRST: the v5 cures
 # PROVED OUT — frame 02b stands (scrollUntilVisible reached the
@@ -137,6 +151,21 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Continue"
     waitUntilVisible: true
+# FIRST-ENTRY WELCOME (drive 6): the "Welcome to Pace Calendar"
+# sheet stands AGAIN inside after a fresh account's first entry
+# (the notifications ask) — modal over the calendar, and the
+# "Sign out" proof waits behind it. Dismiss it whenever it stands.
+- runFlow:
+    when:
+      visible: "Welcome to Pace Calendar"
+    commands:
+      - tapOn:
+          text: "Not now"
+          waitUntilVisible: true
+      - extendedWaitUntil:
+          notVisible:
+            text: "Welcome to Pace Calendar"
+          timeout: 30000
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -204,6 +233,21 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Continue"
     waitUntilVisible: true
+# FIRST-ENTRY WELCOME (drive 6): the "Welcome to Pace Calendar"
+# sheet stands AGAIN inside after a fresh account's first entry
+# (the notifications ask) — modal over the calendar, and the
+# "Sign out" proof waits behind it. Dismiss it whenever it stands.
+- runFlow:
+    when:
+      visible: "Welcome to Pace Calendar"
+    commands:
+      - tapOn:
+          text: "Not now"
+          waitUntilVisible: true
+      - extendedWaitUntil:
+          notVisible:
+            text: "Welcome to Pace Calendar"
+          timeout: 30000
 - extendedWaitUntil:
     visible:
       text: "Sign out"
