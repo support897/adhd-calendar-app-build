@@ -1,0 +1,155 @@
+# Pace SPINE-COMPLETION drive — QA Tester chair.
+# Runs AFTER the main drive (pace-drive.yaml v3) lands clean on the
+# same sim copy. Covers the spine legs the single-account drive does
+# not: account B's own journey + TWO-WAY isolation against account A.
+#   B signs up -> B creates its sentinel ("Sim drive task B") ->
+#   B must NOT see A's sentinel ("Sim drive task one") ->
+#   sign out -> sign in as A -> A's sentinel stands, B's is absent ->
+#   sign out -> sign in as B -> B's sentinel stands.
+# Env: TEST_EMAIL / TEST_PASSWORD (account A, repo secret
+# QA_PACE_TEST_PASSWORD) + TEST_EMAIL2 / TEST_PASSWORD2 (account B,
+# repo secret QA_PACE_TEST_PASSWORD2). Values never appear in this
+# file. Maestro's commands.json records env in plaintext — the
+# workflow's collect step must NOT upload commands.json.
+# DELETE LEG (reserved to QA's chair, NOT in this flow): both
+# accounts are deleted through the app's own flow from QA's chair
+# against the real backend, closed by the owner-side full-footprint
+# 404 read incl. _entitlements (Pace's residue road stands proven).
+appId: shop.ilseplacencia.pace
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      text: "Welcome to Pace Calendar"
+    timeout: 90000
+- takeScreenshot: 00-launched
+- tapOn:
+    text: "Not now"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    notVisible:
+      text: "Welcome to Pace Calendar"
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      text: "Skip tour"
+    timeout: 30000
+- tapOn:
+    text: "Skip tour"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    notVisible:
+      text: "Skip tour"
+    timeout: 30000
+- takeScreenshot: 01-inside-clean
+- tapOn:
+    point: "8%, 10%"
+- takeScreenshot: 02-sidebar
+- tapOn:
+    text: "Sign in"
+    waitUntilVisible: true
+- takeScreenshot: 03-auth-sheet
+- tapOn:
+    text: "you@example.com"
+    waitUntilVisible: true
+- inputText: "${TEST_EMAIL2}"
+- tapOn:
+    text: "Your password"
+- inputText: "${TEST_PASSWORD2}"
+- hideKeyboard
+- takeScreenshot: 04-auth-filled-b
+- tapOn:
+    text: "Continue"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Sign out"
+    timeout: 60000
+- takeScreenshot: 05-signed-in-b
+- tapOn:
+    point: "8%, 10%"
+- takeScreenshot: 06-menu-closed-b
+- tapOn:
+    point: "37%, 26%"
+- takeScreenshot: 07-add-sheet-b
+- tapOn:
+    text: "e.g. Ring the plumber tomorrow at 9am for 30 minutes"
+    waitUntilVisible: true
+- inputText: "Sim drive task B"
+- hideKeyboard
+- tapOn:
+    text: "Add task"
+    waitUntilVisible: true
+- assertVisible:
+    text: "Sim drive task B"
+- takeScreenshot: 08-task-b-created
+- assertNotVisible:
+    text: "Sim drive task one"
+- takeScreenshot: 09-b-isolation
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Sign out"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Sign in"
+    timeout: 30000
+- takeScreenshot: 10-signed-out-b
+- tapOn:
+    text: "Sign in"
+    waitUntilVisible: true
+- tapOn:
+    text: "you@example.com"
+    waitUntilVisible: true
+- inputText: "${TEST_EMAIL}"
+- tapOn:
+    text: "Your password"
+- inputText: "${TEST_PASSWORD}"
+- hideKeyboard
+- tapOn:
+    text: "Continue"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Sign out"
+    timeout: 60000
+- takeScreenshot: 11-relogin-a
+- tapOn:
+    point: "8%, 10%"
+- assertVisible:
+    text: "Sim drive task one"
+- assertNotVisible:
+    text: "Sim drive task B"
+- takeScreenshot: 12-a-isolation
+- tapOn:
+    text: "Sign out"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Sign in"
+    timeout: 30000
+- tapOn:
+    text: "Sign in"
+    waitUntilVisible: true
+- tapOn:
+    text: "you@example.com"
+    waitUntilVisible: true
+- inputText: "${TEST_EMAIL2}"
+- tapOn:
+    text: "Your password"
+- inputText: "${TEST_PASSWORD2}"
+- hideKeyboard
+- tapOn:
+    text: "Continue"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Sign out"
+    timeout: 60000
+- tapOn:
+    point: "8%, 10%"
+- assertVisible:
+    text: "Sim drive task B"
+- takeScreenshot: 13-b-task-stands
