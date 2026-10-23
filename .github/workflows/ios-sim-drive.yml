@@ -42,8 +42,9 @@ jobs:
       - name: Guard the tester secret
         env:
           TEST_PASSWORD: ${{ secrets.QA_PACE_TEST_PASSWORD }}
+          TEST_PASSWORD2: ${{ secrets.QA_PACE_TEST_PASSWORD2 }}
         run: |
-          if [ -z "$TEST_PASSWORD" ]; then
+          if [ -z "$TEST_PASSWORD" ] || [ -z "$TEST_PASSWORD2" ]; then
             echo "::error::QA_PACE_TEST_PASSWORD secret is not set on this repo; the drive cannot sign in. QA seals it; nothing else is missing."
             exit 1
           fi
@@ -115,13 +116,17 @@ jobs:
         env:
           TEST_EMAIL: "placenciailse.qa.pace@gmail.com"
           TEST_PASSWORD: ${{ secrets.QA_PACE_TEST_PASSWORD }}
+          TEST_EMAIL2: "placenciailse.qa.pace2@gmail.com"
+          TEST_PASSWORD2: ${{ secrets.QA_PACE_TEST_PASSWORD2 }}
           MAESTRO_DRIVER_START_TIMEOUT: "180"
           MAESTRO_DRIVER_STARTUP_TIMEOUT: "600000"
         run: |
           maestro test \
             -e TEST_EMAIL="$TEST_EMAIL" \
             -e TEST_PASSWORD="$TEST_PASSWORD" \
-            qa-drive/pace-drive.yaml
+            -e TEST_EMAIL2="$TEST_EMAIL2" \
+            -e TEST_PASSWORD2="$TEST_PASSWORD2" \
+            qa-drive/pace-spine-completion.yaml
 
       - name: Collect the drive record
         if: always()
