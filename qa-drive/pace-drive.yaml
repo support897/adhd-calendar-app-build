@@ -1,4 +1,15 @@
 # Pace simulator drive v9 — QA Tester chair.
+# v18 (2026-10-24) — v17 LANDED on drive 16 (run
+# 39969161289): the header scroll, the add sheet, and frame
+# 08 — THE TASK CREATED, the spine's sentinel standing for
+# the first time in this lane. The drive then died at
+# step-088, the post-sign-out "Sign in" judge: MISPLACED
+# PROOF again — the sign-out landed on the GUEST calendar
+# (the frame stands there, signed out), and "Sign in" lives
+# in Settings → Account, where this flow's own door leg
+# found it. v18 routes every post-sign-out return through
+# Settings (settle + sheet proof + swipe travel) and judges
+# "Sign in" on its own surface, at all three fleet sites.
 # v17 (2026-10-24) — v16's PROVEN CLOSE LANDED on drive 15
 # (run 39966566227): 06 stands with the calendar exposed.
 # Death again at step-069 — but the add tap itself was the
@@ -458,10 +469,52 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Sign out"
     waitUntilVisible: true
+# SIGN-IN LIVES IN SETTINGS (drive 16, run 39969161289): the
+# task was created (08 stands), the sign-out tap landed, and
+# the frame stands on the GUEST calendar — the app's own
+# signed-out home — where "Sign in" never stands. It waits in
+# Settings, in the Account group, the door proven at this
+# flow's first entry. The judge moves to the surface its
+# string lives on (the misplaced-proof law): route back
+# through Settings with the standing settle and sheet proof,
+# travel by swipes, and judge there.
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Settings"
+    waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      notVisible: "How it looks"
+    commands:
+      - tapOn:
+          text: "Show the menu"
+          waitUntilVisible: true
+      - tapOn:
+          text: "Settings"
+          waitUntilVisible: true
+      - waitForAnimationToEnd
+- extendedWaitUntil:
+    visible:
+      text: "How it looks"
+    timeout: 60000
+- repeat:
+    times: 6
+    commands:
+      - swipe:
+          direction: UP
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Sign in"
-    timeout: 30000
+    timeout: 60000
 - takeScreenshot: 09-signed-out
 - tapOn:
     text: "Sign in"
