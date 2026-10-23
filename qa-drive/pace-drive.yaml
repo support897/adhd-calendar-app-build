@@ -1,4 +1,19 @@
-# Pace simulator drive v8 — QA Tester chair.
+# Pace simulator drive v9 — QA Tester chair.
+# v9 (2026-10-23) — v8 FAILED-INSTRUMENT at drive 8 (run
+# 39952558498, step-036) ON A FULL ENTRY: every v8 cure landed
+# (the Settings sheet stood — 02b — the door filled, the
+# submit signed the standing account IN) and the failure frame
+# shows the calendar inside with Skip's TOUR standing: "What's
+# your name?" — the account's first completed entry, so its
+# first-entry surface is the mascot tour, and the tree holds
+# the sheet alone (modal tree occlusion) while the "Sign out"
+# proof waits behind it. The Welcome sheet never stood on
+# this sign-in path; v7's conditional neither fired nor was
+# needed. v9 inserts the conditional tour skip (Skip tour by
+# its own control, whenever it stands) between the Welcome
+# block and the "Sign out" proof at both entries. The
+# completion pair carries the same insert at its three
+# entries. v8: 11,768 B.
 # v8 (2026-10-23) — v7 FAILED-INSTRUMENT at drive 7 (run
 # 39950662965, step-016 scrollUntilVisible "Account"): frame
 # 02-sidebar stands with the sidebar open and "Settings"
@@ -201,6 +216,18 @@ appId: shop.ilseplacencia.pace
           notVisible:
             text: "Welcome to Pace Calendar"
           timeout: 30000
+- runFlow:
+    when:
+      visible: "Skip tour"
+    commands:
+      - tapOn:
+          text: "Skip tour"
+          waitUntilVisible: true
+          retryTapIfNoChange: true
+      - extendedWaitUntil:
+          notVisible:
+            text: "What's your name?"
+          timeout: 30000
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -304,6 +331,18 @@ appId: shop.ilseplacencia.pace
       - extendedWaitUntil:
           notVisible:
             text: "Welcome to Pace Calendar"
+          timeout: 30000
+- runFlow:
+    when:
+      visible: "Skip tour"
+    commands:
+      - tapOn:
+          text: "Skip tour"
+          waitUntilVisible: true
+          retryTapIfNoChange: true
+      - extendedWaitUntil:
+          notVisible:
+            text: "What's your name?"
           timeout: 30000
 - extendedWaitUntil:
     visible:
