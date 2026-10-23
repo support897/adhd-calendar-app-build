@@ -1,4 +1,8 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v14 (2026-10-23) — carries pace-drive v14's Settings settle
+# at all six of this file's Settings entries (drive 12: the
+# page reopens at its remembered scroll position; two DOWN
+# swipes return it to the top before any top-keyed proof).
 # v13 (2026-10-23) — carries pace-drive v13's transport change
 # at its three relocated proof sites: the 100%-visibility
 # scroll burned its full timeout on drive 11 without landing;
@@ -102,6 +106,11 @@ appId: shop.ilseplacencia.pace
     waitUntilVisible: true
     retryTapIfNoChange: true
 - waitForAnimationToEnd
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 # SHEET-STANDING PROOF + RECOVERY (drive 7): the Settings sheet
 # is PROVEN standing by its first group heading before any
 # scroll — "How it looks" (sheet-only text, read from build
@@ -189,6 +198,11 @@ appId: shop.ilseplacencia.pace
     text: "Settings"
     waitUntilVisible: true
     retryTapIfNoChange: true
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "How it looks"
@@ -240,6 +254,11 @@ appId: shop.ilseplacencia.pace
     text: "Settings"
     waitUntilVisible: true
     retryTapIfNoChange: true
+- waitForAnimationToEnd
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
 - waitForAnimationToEnd
 # SHEET-STANDING PROOF + RECOVERY (drive 7): the Settings sheet
 # is PROVEN standing by its first group heading before any
@@ -333,6 +352,11 @@ appId: shop.ilseplacencia.pace
     text: "Settings"
     waitUntilVisible: true
     retryTapIfNoChange: true
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "How it looks"
@@ -372,6 +396,11 @@ appId: shop.ilseplacencia.pace
     text: "Settings"
     waitUntilVisible: true
     retryTapIfNoChange: true
+- waitForAnimationToEnd
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
 - waitForAnimationToEnd
 # SHEET-STANDING PROOF + RECOVERY (drive 7): the Settings sheet
 # is PROVEN standing by its first group heading before any
@@ -464,6 +493,11 @@ appId: shop.ilseplacencia.pace
     text: "Settings"
     waitUntilVisible: true
     retryTapIfNoChange: true
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "How it looks"
