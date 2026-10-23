@@ -1,4 +1,9 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v9 (2026-10-23) — carries pace-drive v9's first-entry tour
+# skip at all three entries (drive 8's lesson: the mascot
+# tour is the account's first inside surface and occludes the
+# tree until skipped; the block is conditional — an account
+# whose tour is done never shows it). v8: 11,156 B.
 # v8 (2026-10-23) — carries pace-drive v8's sheet-standing cure
 # at its three sidebar entries (proof heading "How it looks" +
 # the conditional sidebar recovery) after drive 7's Settings
@@ -150,6 +155,18 @@ appId: shop.ilseplacencia.pace
           notVisible:
             text: "Welcome to Pace Calendar"
           timeout: 30000
+- runFlow:
+    when:
+      visible: "Skip tour"
+    commands:
+      - tapOn:
+          text: "Skip tour"
+          waitUntilVisible: true
+          retryTapIfNoChange: true
+      - extendedWaitUntil:
+          notVisible:
+            text: "What's your name?"
+          timeout: 30000
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -257,6 +274,18 @@ appId: shop.ilseplacencia.pace
           notVisible:
             text: "Welcome to Pace Calendar"
           timeout: 30000
+- runFlow:
+    when:
+      visible: "Skip tour"
+    commands:
+      - tapOn:
+          text: "Skip tour"
+          waitUntilVisible: true
+          retryTapIfNoChange: true
+      - extendedWaitUntil:
+          notVisible:
+            text: "What's your name?"
+          timeout: 30000
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -350,6 +379,18 @@ appId: shop.ilseplacencia.pace
       - extendedWaitUntil:
           notVisible:
             text: "Welcome to Pace Calendar"
+          timeout: 30000
+- runFlow:
+    when:
+      visible: "Skip tour"
+    commands:
+      - tapOn:
+          text: "Skip tour"
+          waitUntilVisible: true
+          retryTapIfNoChange: true
+      - extendedWaitUntil:
+          notVisible:
+            text: "What's your name?"
           timeout: 30000
 - extendedWaitUntil:
     visible:
