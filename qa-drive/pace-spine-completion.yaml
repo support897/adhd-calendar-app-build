@@ -1,4 +1,9 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v12 (2026-10-23) — carries pace-drive v12's scrollUntilVisible
+# form correction at its three relocated proof sites (the short
+# form refused validation on drive 10 before the driver
+# started; the file's element: + direction: form is the proven
+# one).
 # v11 (2026-10-23) — carries pace-drive v11's FULL-NODE
 # completion at its three tour-skip notVisible targets.
 # v10 (2026-10-23) — carries pace-drive v10's relocated
@@ -185,7 +190,9 @@ appId: shop.ilseplacencia.pace
       text: "How it looks"
     timeout: 30000
 - scrollUntilVisible:
-    text: "Account"
+    element:
+      text: "Account"
+    direction: DOWN
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -325,7 +332,9 @@ appId: shop.ilseplacencia.pace
       text: "How it looks"
     timeout: 30000
 - scrollUntilVisible:
-    text: "Account"
+    element:
+      text: "Account"
+    direction: DOWN
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -452,7 +461,9 @@ appId: shop.ilseplacencia.pace
       text: "How it looks"
     timeout: 30000
 - scrollUntilVisible:
-    text: "Account"
+    element:
+      text: "Account"
+    direction: DOWN
 - extendedWaitUntil:
     visible:
       text: "Sign out"
