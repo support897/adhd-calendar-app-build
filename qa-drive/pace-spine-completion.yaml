@@ -104,22 +104,19 @@ appId: shop.ilseplacencia.pace
       - swipe:
           direction: UP
       - waitForAnimationToEnd
-# COMPLETION DRIVE 1 (run 39978282945, SU's job-log read): the
-# refresh travelled and the tree STILL never delivered the heading
-# — the final frame proves the sheet stood painted throughout.
-# The recorded next step for a tree that reads empty after a swipe
-# is the mid-flow RELAUNCH: an unconditional relaunch leg (no
-# clearState — the first launch's fresh state stands) rebuilds
-# the tree before the judge runs.
-- launchApp
-- waitForAnimationToEnd
-- swipe:
-    direction: UP
-- waitForAnimationToEnd
+# COMPLETION DRIVES 1+2 (SU's job-log reads): device, OS and the
+# copy are IDENTICAL to drive 18's brisk pass — the completion
+# sessions are uniformly SLOW (tree evaluations 43-75 s against
+# drive 18's 7 s; first launch 77 s against 44 s), so the head's
+# polls simply never caught the heading inside 90 s. Drive 2 also
+# proved the mid-flow relaunch HARMFUL in this lane: a bare
+# launchApp on the already-running app never completed and killed
+# the flow at the relaunch itself — the leg is REMOVED, never to
+# return on this file. The cure is time: this judge gets 300 s.
 - extendedWaitUntil:
     visible:
       text: "Welcome to Pace Calendar"
-    timeout: 90000
+    timeout: 300000
 - takeScreenshot: 00-launched
 - tapOn:
     text: "Not now"
