@@ -1,15 +1,20 @@
 name: iOS Simulator DRIVE (Pace, QA)
 
-# Manual run only. QA Tester's drive lane: builds the SAME unsigned
-# simulator copy as ios-sim.yml (candidate 22's exact tree), boots a
-# simulator, installs it, then drives the email door + a short journey
-# with Maestro (qa-drive/pace-drive.yaml): sign in (the one button also
-# makes the account on first run) -> create a task -> sign out -> sign
-# in -> the task stands. Stage screenshots + the Maestro record upload
-# as the pace-sim-drive artefact on EVERY outcome, pass or fail, so QA
-# scores from evidence. Test lane only: a pass here proves journeys,
-# buttons, saving and deleting ON A SIMULATOR; it proves nothing about
-# the real-phone door, whose pass lives on the device lane alone.
+# Manual run only. QA Tester's drive lane, v3 — BUILD/DRIVE SPLIT.
+# This workflow does NOT build the app. It downloads the standing
+# simulator copy named in qa-drive/pace-copy-manifest.json (candidate
+# 22's copy: ios-sim.yml run 39608338150, built from bridge commit
+# dc7fbf45), asserts the downloaded artefact zip's sha256 AND the
+# inner app zip's sha256 against the manifest BEFORE anything is
+# installed, then boots a simulator, installs the proven bytes, and
+# drives the email door + a short journey with Maestro
+# (qa-drive/pace-drive.yaml v3: Welcome sheet, then the Skip tour
+# leg, then the spine). Stage screenshots + the Maestro record
+# upload as the pace-sim-drive artefact on EVERY outcome, pass or
+# fail, so QA scores from evidence. Test lane only: a pass here
+# proves journeys, buttons, saving and deleting ON A SIMULATOR; it
+# proves nothing about the real-phone door, whose pass lives on the
+# device lane alone.
 # The device build + ios-ipa.yml + ios-sim.yml are untouched by this file.
 # Credentials: the tester password reaches the drive only through the
 # repo secret QA_PACE_TEST_PASSWORD (sealed by QA; the tester is a
@@ -19,15 +24,15 @@ name: iOS Simulator DRIVE (Pace, QA)
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   drive:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
 
       - uses: actions/setup-java@v4
         with:
@@ -44,28 +49,42 @@ jobs:
           fi
           echo "Tester secret present."
 
-      - name: Install dependencies and sync iOS
-        working-directory: store
+      - name: Fetch the standing copy and prove its hash (manifest)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          npm ci
-          npx cap sync ios
-
-      - name: Build the simulator copy (no signing)
-        working-directory: store
-        run: |
-          xcodebuild build \
-            -project ios/App/App.xcodeproj \
-            -scheme App \
-            -configuration Release \
-            -destination "generic/platform=iOS Simulator" \
-            -derivedDataPath "$RUNNER_TEMP/sim-build" \
-            CODE_SIGNING_ALLOWED=NO
-          find "$RUNNER_TEMP/sim-build/Build/Products" -maxdepth 2 -name "*.app" -print
+          set -euo pipefail
+          MANIFEST="qa-drive/pace-copy-manifest.json"
+          ARTEFACT_ID=$(jq -r .artefactId "$MANIFEST")
+          WANT_SHA=$(jq -r .artefactSha256 "$MANIFEST")
+          APP_ZIP_SHA=$(jq -r .appZipSha256 "$MANIFEST")
+          echo "Manifest names artefact $ARTEFACT_ID, sha256 $WANT_SHA"
+          curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTEFACT_ID/zip" \
+            -o "$RUNNER_TEMP/pace-sim-copy-artefact.zip"
+          GOT_SHA=$(shasum -a 256 "$RUNNER_TEMP/pace-sim-copy-artefact.zip" | awk '{print $1}')
+          echo "Downloaded artefact sha256: $GOT_SHA"
+          if [ "$GOT_SHA" != "$WANT_SHA" ]; then
+            echo "::error::Standing copy hash mismatch — refusing to install unproven bytes."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/copy" "$RUNNER_TEMP/app"
+          unzip -q "$RUNNER_TEMP/pace-sim-copy-artefact.zip" -d "$RUNNER_TEMP/copy"
+          INNER_SHA=$(shasum -a 256 "$RUNNER_TEMP/copy/pace-sim-app.zip" | awk '{print $1}')
+          echo "Inner app zip sha256: $INNER_SHA"
+          if [ "$INNER_SHA" != "$APP_ZIP_SHA" ]; then
+            echo "::error::Inner app zip hash mismatch — refusing to install unproven bytes."
+            exit 1
+          fi
+          ditto -x -k "$RUNNER_TEMP/copy/pace-sim-app.zip" "$RUNNER_TEMP/app"
+          ls -ld "$RUNNER_TEMP/app/App.app"
 
       - name: Boot a simulator and install the copy
         run: |
           set -euo pipefail
-          APP_PATH=$(find "$RUNNER_TEMP/sim-build/Build/Products" -maxdepth 2 -name "App.app" | head -1)
+          APP_PATH="$RUNNER_TEMP/app/App.app"
           echo "App: $APP_PATH"
           UDID=$(python3 - <<'PY'
           import json, subprocess
