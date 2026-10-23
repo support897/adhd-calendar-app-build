@@ -1,4 +1,16 @@
-# Pace simulator drive v3 — QA Tester chair.
+# Pace simulator drive v5 — QA Tester chair.
+# v5 (2026-10-23) — v4 FAILED-INSTRUMENT at run 39944344163,
+# step-016 (the "Account" assert): the Settings route PROVED OUT
+# (the Settings page stood whole in the frames — tour leg, sidebar
+# and Settings tap all passed), but the Account group sits BELOW
+# the fold on the long Settings page and the WebView tree holds
+# only rendered content (the failure hierarchy holds "Account"
+# ZERO times). v5 cures: (a) the entry leg scrolls until "Account"
+# stands (scrollUntilVisible) instead of waiting for it; (b) the
+# sign-out leg scrolls until "Sign out" stands; (c) the fleet
+# hideKeyboard cure (3 sites) — the class is proven systemically
+# elsewhere, so Pace's uncured vote is retired and the cure rides
+# prophylactically. v4: 4,449 B / 53 commands.
 # v3 change from v2's own run record (run 39938033876, FAILED at step
 # 011 "Sign in", INSTRUMENT): after the Welcome sheet is dismissed,
 # build 22 presents the Skip mascot TOUR (name step: "Ahoy! I'm Skip.
@@ -63,10 +75,11 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Settings"
     waitUntilVisible: true
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       text: "Account"
-    timeout: 30000
+    direction: DOWN
+    timeout: 60000
 - takeScreenshot: 02b-settings-account
 - tapOn:
     text: "Sign in"
@@ -79,7 +92,8 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Your password"
 - inputText: "${TEST_PASSWORD}"
-- hideKeyboard
+- tapOn:
+    point: "90%, 62%"
 - takeScreenshot: 04-auth-filled
 - tapOn:
     text: "Continue"
@@ -99,7 +113,8 @@ appId: shop.ilseplacencia.pace
     text: "e.g. Ring the plumber tomorrow at 9am for 30 minutes"
     waitUntilVisible: true
 - inputText: "Sim drive task one"
-- hideKeyboard
+- tapOn:
+    point: "90%, 62%"
 - tapOn:
     text: "Add task"
     waitUntilVisible: true
@@ -111,6 +126,11 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Settings"
     waitUntilVisible: true
+- scrollUntilVisible:
+    element:
+      text: "Sign out"
+    direction: DOWN
+    timeout: 60000
 - tapOn:
     text: "Sign out"
     waitUntilVisible: true
@@ -129,7 +149,8 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Your password"
 - inputText: "${TEST_PASSWORD}"
-- hideKeyboard
+- tapOn:
+    point: "90%, 62%"
 - tapOn:
     text: "Continue"
     waitUntilVisible: true
