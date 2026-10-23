@@ -1,4 +1,9 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v10 (2026-10-23) — carries pace-drive v10's relocated
+# signed-in proofs (all three of this file's "Sign out" waits
+# stood on the calendar, where the string never lives; drive 9
+# exposed it). Proofs now run through Settings' Account group
+# and return via the sidebar's Calendar item.
 # v9 (2026-10-23) — carries pace-drive v9's first-entry tour
 # skip at all three entries (drive 8's lesson: the mascot
 # tour is the account's first inside surface and occludes the
@@ -167,11 +172,32 @@ appId: shop.ilseplacencia.pace
           notVisible:
             text: "What's your name?"
           timeout: 30000
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Settings"
+    waitUntilVisible: true
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      text: "How it looks"
+    timeout: 30000
+- scrollUntilVisible:
+    text: "Account"
 - extendedWaitUntil:
     visible:
       text: "Sign out"
     timeout: 60000
 - takeScreenshot: 05-signed-in-b
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Calendar"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Bad"
+    timeout: 30000
 - tapOn:
     point: "8%, 10%"
 - takeScreenshot: 06-menu-closed-b
@@ -286,11 +312,32 @@ appId: shop.ilseplacencia.pace
           notVisible:
             text: "What's your name?"
           timeout: 30000
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Settings"
+    waitUntilVisible: true
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      text: "How it looks"
+    timeout: 30000
+- scrollUntilVisible:
+    text: "Account"
 - extendedWaitUntil:
     visible:
       text: "Sign out"
     timeout: 60000
 - takeScreenshot: 11-relogin-a
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Calendar"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Bad"
+    timeout: 30000
 - tapOn:
     point: "8%, 10%"
 - assertVisible:
@@ -392,6 +439,18 @@ appId: shop.ilseplacencia.pace
           notVisible:
             text: "What's your name?"
           timeout: 30000
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Settings"
+    waitUntilVisible: true
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      text: "How it looks"
+    timeout: 30000
+- scrollUntilVisible:
+    text: "Account"
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -401,3 +460,12 @@ appId: shop.ilseplacencia.pace
 - assertVisible:
     text: "Sim drive task B"
 - takeScreenshot: 13-b-task-stands
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Calendar"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Bad"
+    timeout: 30000
