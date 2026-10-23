@@ -1,4 +1,15 @@
 # Pace simulator drive v9 — QA Tester chair.
+# v16 (2026-10-24) — v15's REFRESH LANDED on drive 14 (run
+# 39965456221): 00-launched stood, the whole door round trip
+# travelled (welcome, tour, Settings, sign-in, all framed),
+# and the drive reached the task creation. Death at step-069,
+# the title field: frame 06-menu-closed shows the SIDEBAR
+# STANDING OPEN — the blind toggle tap meant to close it was
+# spent on the sidebar's own header, which covers the
+# toggle's point — and the add tap fired into the wrong
+# surface (the board). v16 makes the menu-close conditional
+# and proven: keyed on a sidebar-only item, closed by the
+# content sliver, at both journey sites in both files.
 # v15 (2026-10-23) — drive 13 (run 39963582655) died at the
 # flow's FIRST command: the welcome sheet stood painted in the
 # final frame while the tree never delivered its heading for
@@ -351,8 +362,20 @@ appId: shop.ilseplacencia.pace
     visible:
       text: "Bad"
     timeout: 30000
-- tapOn:
-    point: "8%, 10%"
+# MENU-CLOSE, PROVEN (drive 14, run 39965456221): the second
+# blind toggle tap did NOT close the menu — frame 06 shows the
+# sidebar standing OPEN (its header covers the toggle's point,
+# so the tap was spent on the header), and the add tap then
+# fired into the sidebar's surface. The close is now
+# conditional on a sidebar-only item standing, and lands on
+# the content sliver, which this app answers by closing.
+- runFlow:
+    when:
+      visible: "Progress"
+    commands:
+      - tapOn:
+          point: "93%, 50%"
+      - waitForAnimationToEnd
 - takeScreenshot: 06-menu-closed
 - tapOn:
     point: "37%, 26%"
@@ -502,8 +525,20 @@ appId: shop.ilseplacencia.pace
     visible:
       text: "Bad"
     timeout: 30000
-- tapOn:
-    point: "8%, 10%"
+# MENU-CLOSE, PROVEN (drive 14, run 39965456221): the second
+# blind toggle tap did NOT close the menu — frame 06 shows the
+# sidebar standing OPEN (its header covers the toggle's point,
+# so the tap was spent on the header), and the add tap then
+# fired into the sidebar's surface. The close is now
+# conditional on a sidebar-only item standing, and lands on
+# the content sliver, which this app answers by closing.
+- runFlow:
+    when:
+      visible: "Progress"
+    commands:
+      - tapOn:
+          point: "93%, 50%"
+      - waitForAnimationToEnd
 - assertVisible:
     text: "Sim drive task one"
 - takeScreenshot: 11-task-stands
