@@ -1,4 +1,8 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v8 (2026-10-23) — carries pace-drive v8's sheet-standing cure
+# at its three sidebar entries (proof heading "How it looks" +
+# the conditional sidebar recovery) after drive 7's Settings
+# tap race on the main flow. v7: 8,839 B.
 # v7 (2026-10-23) — mirrors pace-drive v7's first-entry welcome
 # dismissal (drive 6's proof: the Welcome sheet re-stands inside
 # after a fresh account's first entry) at its three Continue sites
@@ -75,6 +79,28 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Settings"
     waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
+# SHEET-STANDING PROOF + RECOVERY (drive 7): the Settings sheet
+# is PROVEN standing by its first group heading before any
+# scroll — "How it looks" (sheet-only text, read from build
+# 22's packaged markup). If it does not stand, the sidebar is
+# re-opened and Settings tapped again; the proof then judges.
+- runFlow:
+    when:
+      notVisible: "How it looks"
+    commands:
+      - tapOn:
+          text: "Show the menu"
+          waitUntilVisible: true
+      - tapOn:
+          text: "Settings"
+          waitUntilVisible: true
+      - waitForAnimationToEnd
+- extendedWaitUntil:
+    visible:
+      text: "How it looks"
+    timeout: 60000
 - scrollUntilVisible:
     element:
       text: "Account"
@@ -155,6 +181,28 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Settings"
     waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
+# SHEET-STANDING PROOF + RECOVERY (drive 7): the Settings sheet
+# is PROVEN standing by its first group heading before any
+# scroll — "How it looks" (sheet-only text, read from build
+# 22's packaged markup). If it does not stand, the sidebar is
+# re-opened and Settings tapped again; the proof then judges.
+- runFlow:
+    when:
+      notVisible: "How it looks"
+    commands:
+      - tapOn:
+          text: "Show the menu"
+          waitUntilVisible: true
+      - tapOn:
+          text: "Settings"
+          waitUntilVisible: true
+      - waitForAnimationToEnd
+- extendedWaitUntil:
+    visible:
+      text: "How it looks"
+    timeout: 60000
 - scrollUntilVisible:
     element:
       text: "Sign out"
@@ -228,6 +276,28 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Settings"
     waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
+# SHEET-STANDING PROOF + RECOVERY (drive 7): the Settings sheet
+# is PROVEN standing by its first group heading before any
+# scroll — "How it looks" (sheet-only text, read from build
+# 22's packaged markup). If it does not stand, the sidebar is
+# re-opened and Settings tapped again; the proof then judges.
+- runFlow:
+    when:
+      notVisible: "How it looks"
+    commands:
+      - tapOn:
+          text: "Show the menu"
+          waitUntilVisible: true
+      - tapOn:
+          text: "Settings"
+          waitUntilVisible: true
+      - waitForAnimationToEnd
+- extendedWaitUntil:
+    visible:
+      text: "How it looks"
+    timeout: 60000
 - scrollUntilVisible:
     element:
       text: "Sign out"
