@@ -541,10 +541,18 @@ appId: shop.ilseplacencia.pace
 - assertNotVisible:
     text: "Sim drive task B"
 - takeScreenshot: 12-a-isolation
-# Sign-out rides the Settings route here too (v4 correction): the
-# point tap above opened the sidebar; "Sign out" stands in Settings'
-# account group, never in the sidebar. To be re-read against the v4
-# main drive's frames before this flow dispatches (its standing gate).
+# Sign-out rides the Settings route here too. COMPLETION DRIVE 3
+# (run 39984982232) reached this tail for the first time in the
+# campaign and exposed an authoring gap: NOTHING above opens the
+# sidebar — the isolation block's last sidebar act is the
+# conditional menu-CLOSE — so the "Settings" tap hunted a node
+# that never stood and died at step-152. The sidebar opens here,
+# the proven way (the drive-7 recovery's own toggle), first.
+- tapOn:
+    text: "Show the menu"
+    waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
 - tapOn:
     text: "Settings"
     waitUntilVisible: true
