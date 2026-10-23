@@ -1,4 +1,18 @@
 # Pace simulator drive v9 — QA Tester chair.
+# v14 (2026-10-23) — drive 12 (run 39960463742) travelled the
+# furthest yet (02b · 03 · 04 all standing, the sign-in fired)
+# and died at step-041, the "How it looks" proof on the
+# RE-ENTRY Settings round trip: the failure frame shows the
+# Settings page standing OPEN, SCROLLED MID-PAGE — the app
+# REMEMBERS the page's scroll position between visits in a
+# session (the door-leg visit left it low), the top heading
+# sits above the rendered tree, and a top-keyed proof can
+# never pass from there. The app behaved fine; the proof was
+# position-fragile. SETTINGS SCROLL MEMORY joins the classes.
+# v14 settles every Settings entry in the pair: two DOWN
+# swipes + a settle right after the entry tap, so "How it
+# looks" judges from the page's top wherever the page was
+# left. The UP-swipe transport to the Account group stands.
 # v13 (2026-10-23) — drive 11 (run 39958544549) travelled
 # clean to the Settings proof and died in its scroll: SU's log
 # read names it — scrollUntilVisible burned its full 60 s
@@ -191,6 +205,11 @@ appId: shop.ilseplacencia.pace
     waitUntilVisible: true
     retryTapIfNoChange: true
 - waitForAnimationToEnd
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 # SHEET-STANDING PROOF + RECOVERY (drive 7): the Settings sheet
 # is PROVEN standing by its first group heading before any
 # scroll — "How it looks" (sheet-only text, read from build
@@ -278,6 +297,11 @@ appId: shop.ilseplacencia.pace
     text: "Settings"
     waitUntilVisible: true
     retryTapIfNoChange: true
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "How it looks"
@@ -326,6 +350,11 @@ appId: shop.ilseplacencia.pace
     text: "Settings"
     waitUntilVisible: true
     retryTapIfNoChange: true
+- waitForAnimationToEnd
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
 - waitForAnimationToEnd
 # SHEET-STANDING PROOF + RECOVERY (drive 7): the Settings sheet
 # is PROVEN standing by its first group heading before any
@@ -419,6 +448,11 @@ appId: shop.ilseplacencia.pace
     text: "Settings"
     waitUntilVisible: true
     retryTapIfNoChange: true
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "How it looks"
