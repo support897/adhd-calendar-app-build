@@ -104,6 +104,18 @@ appId: shop.ilseplacencia.pace
       - swipe:
           direction: UP
       - waitForAnimationToEnd
+# COMPLETION DRIVE 1 (run 39978282945, SU's job-log read): the
+# refresh travelled and the tree STILL never delivered the heading
+# — the final frame proves the sheet stood painted throughout.
+# The recorded next step for a tree that reads empty after a swipe
+# is the mid-flow RELAUNCH: an unconditional relaunch leg (no
+# clearState — the first launch's fresh state stands) rebuilds
+# the tree before the judge runs.
+- launchApp
+- waitForAnimationToEnd
+- swipe:
+    direction: UP
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Welcome to Pace Calendar"
