@@ -1,4 +1,9 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v19 (2026-10-24) — carries pace-drive v19's page-top
+# refresh before the feeling proof at all three of this
+# file's journey heads (Pace drive 17: a returning account's
+# calendar re-enters scrolled, the feeling row above the
+# viewport).
 # v18 (2026-10-24) — carries pace-drive v18's relocated
 # sign-in judges (drive 16: "Sign in" lives in Settings,
 # never on the guest calendar) at both of this file's
@@ -253,6 +258,19 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Calendar"
     waitUntilVisible: true
+# PAGE-TOP REFRESH BEFORE THE FEELING PROOF (Pace drive 17,
+# run 39970674708): the "Bad" judge died at step-064 with the
+# failure frame standing on the calendar SCROLLED — the
+# standing task's strip at the top, the feeling row above
+# the viewport. A returning account's calendar re-enters
+# scrolled (the drive-15 lesson, one step earlier than the
+# add leg's own refresh). Two DOWN swipes return the page
+# to its top (transport); the feeling row then judges.
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Bad"
@@ -478,6 +496,19 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Calendar"
     waitUntilVisible: true
+# PAGE-TOP REFRESH BEFORE THE FEELING PROOF (Pace drive 17,
+# run 39970674708): the "Bad" judge died at step-064 with the
+# failure frame standing on the calendar SCROLLED — the
+# standing task's strip at the top, the feeling row above
+# the viewport. A returning account's calendar re-enters
+# scrolled (the drive-15 lesson, one step earlier than the
+# add leg's own refresh). Two DOWN swipes return the page
+# to its top (transport); the feeling row then judges.
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Bad"
@@ -677,6 +708,19 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Calendar"
     waitUntilVisible: true
+# PAGE-TOP REFRESH BEFORE THE FEELING PROOF (Pace drive 17,
+# run 39970674708): the "Bad" judge died at step-064 with the
+# failure frame standing on the calendar SCROLLED — the
+# standing task's strip at the top, the feeling row above
+# the viewport. A returning account's calendar re-enters
+# scrolled (the drive-15 lesson, one step earlier than the
+# add leg's own refresh). Two DOWN swipes return the page
+# to its top (transport); the feeling row then judges.
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Bad"
