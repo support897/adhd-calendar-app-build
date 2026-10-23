@@ -1,3 +1,31 @@
+# Pace simulator drive v6 — QA Tester chair.
+# v6 (2026-10-23) — v5 FAILED-INSTRUMENT at run 39946049867,
+# step-022 tapOn "Your password". PROGRESS FIRST: the v5 cures
+# PROVED OUT — frame 02b stands (scrollUntilVisible reached the
+# Account group below the fold), the "Sign in" tap opened the auth
+# sheet (03), and the email LANDED (the tester's address typed +
+# focused in the failure frame; the focus race did not bite here).
+# THE FAULT: the door leg carried NO ADVANCE — it tapped "Your
+# password" straight after the email input, a shape inherited from
+# the v1-era read of the door as ONE sheet holding both fields.
+# Build 22's shipped door is TWO steps (byte proof in the packaged
+# index.html: step 1 = #authEmail + #doorNext, the arrow button,
+# aria-label "Next"; step 2 #doorStep2 hidden until the advance,
+# holding the "Your password" label + #authPass + the "Continue"
+# button #authGo). "Your password" stood ZERO times in the step-1
+# tree. v6 cures every door leg: focus-race hardening on the email
+# tap (retryTapIfNoChange + waitForAnimationToEnd) · a landing
+# proof (extendedWaitUntil on the typed address) · the arrow tap
+# (text "Next", waitUntilVisible) · a 30 s wait for the password
+# step · and the password leg's accessory point tap REMOVED (the
+# amended dismissal law: the step-022 frame shows it never
+# dismissed — keyboard standing in frame — and step 2's layout
+# lifts its Continue above the keyboard the same way step 1 lifts
+# its arrow; the failure frame judges if that read is wrong). The
+# sealed-value discriminator STILL has not run — it rides the
+# re-login leg this flow never reached; it stays armed in v6.
+# The journey's own accessory tap (task form) stands flagged
+# unjudged. v5: 5,378 B / 54 commands.
 # Pace simulator drive v5 — QA Tester chair.
 # v5 (2026-10-23) — v4 FAILED-INSTRUMENT at run 39944344163,
 # step-016 (the "Account" assert): the Settings route PROVED OUT
@@ -88,12 +116,23 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "you@example.com"
     waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
 - inputText: "${TEST_EMAIL}"
+- extendedWaitUntil:
+    visible:
+      text: "${TEST_EMAIL}"
+    timeout: 15000
+- tapOn:
+    text: "Next"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Your password"
+    timeout: 30000
 - tapOn:
     text: "Your password"
 - inputText: "${TEST_PASSWORD}"
-- tapOn:
-    point: "90%, 62%"
 - takeScreenshot: 04-auth-filled
 - tapOn:
     text: "Continue"
@@ -145,12 +184,23 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "you@example.com"
     waitUntilVisible: true
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
 - inputText: "${TEST_EMAIL}"
+- extendedWaitUntil:
+    visible:
+      text: "${TEST_EMAIL}"
+    timeout: 15000
+- tapOn:
+    text: "Next"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Your password"
+    timeout: 30000
 - tapOn:
     text: "Your password"
 - inputText: "${TEST_PASSWORD}"
-- tapOn:
-    point: "90%, 62%"
 - tapOn:
     text: "Continue"
     waitUntilVisible: true
