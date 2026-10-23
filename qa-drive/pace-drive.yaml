@@ -1,4 +1,15 @@
 # Pace simulator drive v9 — QA Tester chair.
+# v12 (2026-10-23) — v10/v11 REFUSED AT VALIDATION on drive 10
+# (run 39957122289; SU's log read: "Config Field Required:
+# element at …:257:1", 11.5 s after invocation, the driver
+# never started): my v10 round trip wrote scrollUntilVisible
+# in a short form (text: directly) at the five relocated proof
+# sites, where the file's own proven form carries element: +
+# direction: (the sites that ran all along). v12 corrects all
+# five to the proven form; everything else stands. Lesson
+# banked: a flow transform must reuse the file's own proven
+# command shapes verbatim — my YAML parse check could not see
+# a grammar fault, and only the runner's validation could.
 # v11 (2026-10-23) — the FULL-NODE MATCHING completion (class
 # proven on Fit drive 4 the same hour): the tour-skip blocks'
 # notVisible targets carry Skip's complete heading "Ahoy! I'm
@@ -260,7 +271,9 @@ appId: shop.ilseplacencia.pace
       text: "How it looks"
     timeout: 30000
 - scrollUntilVisible:
-    text: "Account"
+    element:
+      text: "Account"
+    direction: DOWN
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -397,7 +410,9 @@ appId: shop.ilseplacencia.pace
       text: "How it looks"
     timeout: 30000
 - scrollUntilVisible:
-    text: "Account"
+    element:
+      text: "Account"
+    direction: DOWN
 - extendedWaitUntil:
     visible:
       text: "Sign out"
