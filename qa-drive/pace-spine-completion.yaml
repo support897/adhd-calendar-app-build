@@ -1,4 +1,8 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v13 (2026-10-23) — carries pace-drive v13's transport change
+# at its three relocated proof sites: the 100%-visibility
+# scroll burned its full timeout on drive 11 without landing;
+# six plain UP swipes travel, the "Sign out" wait judges.
 # v12 (2026-10-23) — carries pace-drive v12's scrollUntilVisible
 # form correction at its three relocated proof sites (the short
 # form refused validation on drive 10 before the driver
@@ -189,10 +193,12 @@ appId: shop.ilseplacencia.pace
     visible:
       text: "How it looks"
     timeout: 30000
-- scrollUntilVisible:
-    element:
-      text: "Account"
-    direction: DOWN
+- repeat:
+    times: 6
+    commands:
+      - swipe:
+          direction: UP
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -331,10 +337,12 @@ appId: shop.ilseplacencia.pace
     visible:
       text: "How it looks"
     timeout: 30000
-- scrollUntilVisible:
-    element:
-      text: "Account"
-    direction: DOWN
+- repeat:
+    times: 6
+    commands:
+      - swipe:
+          direction: UP
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Sign out"
@@ -460,10 +468,12 @@ appId: shop.ilseplacencia.pace
     visible:
       text: "How it looks"
     timeout: 30000
-- scrollUntilVisible:
-    element:
-      text: "Account"
-    direction: DOWN
+- repeat:
+    times: 6
+    commands:
+      - swipe:
+          direction: UP
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Sign out"
