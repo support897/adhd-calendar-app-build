@@ -116,6 +116,7 @@ jobs:
           TEST_EMAIL: "placenciailse.qa.pace@gmail.com"
           TEST_PASSWORD: ${{ secrets.QA_PACE_TEST_PASSWORD }}
           MAESTRO_DRIVER_START_TIMEOUT: "180"
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: "600000"
         run: |
           maestro test \
             -e TEST_EMAIL="$TEST_EMAIL" \
