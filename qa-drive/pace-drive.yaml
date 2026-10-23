@@ -1,4 +1,16 @@
 # Pace simulator drive v9 — QA Tester chair.
+# v19 (2026-10-24) — v18's relocated sign-in judge was never
+# reached on drive 17 (run 39970674708): death at step-064,
+# the journey head's feeling proof "Bad" — the frame stands
+# on the calendar SCROLLED, the standing task's strip at the
+# top ("Sim drive task one · about 25 min", and the day panel
+# below reads "0 of 1 done" with the task standing — DRIVE
+# 16'S TASK PERSISTED, photographed by the failure itself).
+# A returning account's calendar re-enters scrolled; the
+# feeling row stands above the viewport. v19 puts the
+# page-top refresh (two DOWN swipes, transport) before the
+# feeling proof at every journey head in the pair (main ×2 —
+# the journey and the re-login — completion ×3).
 # v18 (2026-10-24) — v17 LANDED on drive 16 (run
 # 39969161289): the header scroll, the add sheet, and frame
 # 08 — THE TASK CREATED, the spine's sentinel standing for
@@ -378,6 +390,19 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Calendar"
     waitUntilVisible: true
+# PAGE-TOP REFRESH BEFORE THE FEELING PROOF (Pace drive 17,
+# run 39970674708): the "Bad" judge died at step-064 with the
+# failure frame standing on the calendar SCROLLED — the
+# standing task's strip at the top, the feeling row above
+# the viewport. A returning account's calendar re-enters
+# scrolled (the drive-15 lesson, one step earlier than the
+# add leg's own refresh). Two DOWN swipes return the page
+# to its top (transport); the feeling row then judges.
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Bad"
@@ -600,6 +625,19 @@ appId: shop.ilseplacencia.pace
 - tapOn:
     text: "Calendar"
     waitUntilVisible: true
+# PAGE-TOP REFRESH BEFORE THE FEELING PROOF (Pace drive 17,
+# run 39970674708): the "Bad" judge died at step-064 with the
+# failure frame standing on the calendar SCROLLED — the
+# standing task's strip at the top, the feeling row above
+# the viewport. A returning account's calendar re-enters
+# scrolled (the drive-15 lesson, one step earlier than the
+# add leg's own refresh). Two DOWN swipes return the page
+# to its top (transport); the feeling row then judges.
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Bad"
