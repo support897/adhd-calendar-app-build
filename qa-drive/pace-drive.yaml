@@ -1,4 +1,18 @@
 # Pace simulator drive v9 — QA Tester chair.
+# v10 (2026-10-23) — v9 FAILED-INSTRUMENT at drive 9 (run
+# 39954918760, step-039) AND EXPOSED THE OLDEST FLOW FAULT OF
+# THE LANE: with both modals handled, the failure frame stands
+# on a CLEAN CALENDAR — and "Sign out" is not there, because
+# it never was: it lives in Settings' Account group, and the
+# signed-in proof wait has stood on the wrong surface since
+# v4. Drives 6 and 8 died in front of this wall behind their
+# modals; drive 9 reached it bare. v10 relocates every
+# signed-in proof (main x2, completion x3): sidebar -> Settings
+# -> the sheet-standing proof -> scroll to Account -> "Sign
+# out" where it lives -> back via the sidebar's Calendar item.
+# The journey steps after the proof stand as authored — drive
+# 10 judges them on first reach. v9: main 13,204 B, completion
+# 12,308 B.
 # v9 (2026-10-23) — v8 FAILED-INSTRUMENT at drive 8 (run
 # 39952558498, step-036) ON A FULL ENTRY: every v8 cure landed
 # (the Settings sheet stood — 02b — the door filled, the
@@ -228,11 +242,32 @@ appId: shop.ilseplacencia.pace
           notVisible:
             text: "What's your name?"
           timeout: 30000
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Settings"
+    waitUntilVisible: true
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      text: "How it looks"
+    timeout: 30000
+- scrollUntilVisible:
+    text: "Account"
 - extendedWaitUntil:
     visible:
       text: "Sign out"
     timeout: 60000
 - takeScreenshot: 05-signed-in
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Calendar"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Bad"
+    timeout: 30000
 - tapOn:
     point: "8%, 10%"
 - takeScreenshot: 06-menu-closed
@@ -344,11 +379,32 @@ appId: shop.ilseplacencia.pace
           notVisible:
             text: "What's your name?"
           timeout: 30000
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Settings"
+    waitUntilVisible: true
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      text: "How it looks"
+    timeout: 30000
+- scrollUntilVisible:
+    text: "Account"
 - extendedWaitUntil:
     visible:
       text: "Sign out"
     timeout: 60000
 - takeScreenshot: 10-relogin
+- tapOn:
+    point: "8%, 10%"
+- tapOn:
+    text: "Calendar"
+    waitUntilVisible: true
+- extendedWaitUntil:
+    visible:
+      text: "Bad"
+    timeout: 30000
 - tapOn:
     point: "8%, 10%"
 - assertVisible:
