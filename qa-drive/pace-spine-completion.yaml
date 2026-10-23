@@ -1,4 +1,7 @@
 # Pace SPINE-COMPLETION drive — QA Tester chair.
+# v15 (2026-10-23) — carries pace-drive v15's tree-refresh
+# head (drive 13's cold-start tree lag; the refresh stands
+# before the first judge here too).
 # v14 (2026-10-23) — carries pace-drive v14's Settings settle
 # at all six of this file's Settings entries (drive 12: the
 # page reopens at its remembered scroll position; two DOWN
@@ -69,6 +72,23 @@ appId: shop.ilseplacencia.pace
 ---
 - launchApp:
     clearState: true
+# TREE-REFRESH BEFORE THE FIRST JUDGE (drive 13, run 39963582655):
+# the sheet stood PAINTED in the final frame while the tree never
+# delivered its heading for the first wait's whole ~85 s — tree lag
+# at cold start, Ruefly 6's blindness at the first surface. A
+# gesture rebuilds the snapshot; the recovery repeats it once if
+# the heading still does not stand; only then does the judge run.
+- waitForAnimationToEnd
+- swipe:
+    direction: UP
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      notVisible: "Welcome to Pace Calendar"
+    commands:
+      - swipe:
+          direction: UP
+      - waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       text: "Welcome to Pace Calendar"
