@@ -7,30 +7,31 @@ The live web app is unchanged; this package only wraps it.
 
 ## What this is
 - Capacitor 8.5.3 (core/android/ios/cli aligned), appId shop.ilseplacencia.pace,
-  appName "Pace", version 1.0.0 (versionCode 1).
+  appName "Pace Calendar", version 1.0.0 (versionCode 1).
 - www/ is a byte-identical copy of the web app, produced by
   scripts/sync-www.mjs (MD5-verified on every sync; the v3 app with To do +
   Habits is what's inside).
 - capacitor.config.json holds no server.url and no cleartext — the app runs
-  fully offline from the bundle.
+  from bundled assets rather than a remote web URL. Core offline use has not
+  been verified on a physical device; sign-in and account sync need internet.
 - Android: variables.gradle minSdk 24 / compileSdk 36 / targetSdk 36 (the
   Scout baseline). Release signing reads android/keystore.properties ONLY when
   present (see SIGNING.md — the keystore is Ilse's Secure Vault step; the AAB
   here is built unsigned but signing-ready, the declared deviation).
 - iOS: Xcode project + SPM, deployment target 15.0, bundle id set in the
-  project, version 1.0.0 / 1, and a PrivacyInfo.xcprivacy wired into the app
-  target (no tracking, no collected data, UserDefaults reason CA92.1 — the
-  truth for a localStorage app). Compiling needs a Mac or cloud (none here).
+  project, version 1.0.0 / 27 for this QA build, and a PrivacyInfo.xcprivacy
+  wired into the app target (no tracking; it declares email, name, user ID, and
+  other user content for app functionality, plus UserDefaults reason CA92.1).
+  Compiling needs a Mac or cloud (the lead builds; no xcodebuild here).
 
-## Listing pack (listing/)
-LISTING.md (titles within limits, Play short description 74/80, full
-description from real features, Apple keywords audited with the aso skill:
-de-duplicated against the title, 'habits' added), PRIVACY-POLICY.md +
-privacy.html (collects nothing; honest notes on the OCR CDN, browser voice
-and local notifications), RATING-NOTES.md (4+/Everyone, all data-safety
-answers "none", Apple review notes, the 6 pre-submission tasks),
-feature graphic, icons, and 4 real screenshots per store (a 5th, Habits,
-joins once the new logo wires).
+## Store listing and privacy status
+No App Store or Play listing-copy folder is present in this checkout. The old
+"collects nothing" and "data-safety answers none" statements are outdated:
+Pace stores account email, name, user ID, and planner content in Firebase when
+signed in, including optional audio notes. The privacy policy now explains
+local storage when signed out and account sync when signed in. The owner must
+review store privacy labels and listing text before release. No store submission
+was made.
 
 ## Proof gathered here
 - cap sync clean; www MD5-identical to the web repo.
