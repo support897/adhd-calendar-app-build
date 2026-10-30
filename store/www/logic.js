@@ -21,24 +21,36 @@ function nudgeTime(task, setupMin) {
 }
 
 var CATEGORIES = [
-  { id: "money",   words: ["pay", "bill", "invoice", "bank", "tax", "rent", "budget", "quote", "price", "refund"], color: "#C9920E" },
-  { id: "health",  words: ["doctor", "dentist", "medicine", "tablet", "gym", "walk", "run", "yoga", "therapist", "physio", "vet", "appointment"], color: "#E85D75" },
-  { id: "work",    words: ["work", "meeting", "email", "report", "client", "boss", "presentation", "spreadsheet", "call the office"], color: "#5B6BD5" },
-  { id: "home",    words: ["clean", "tidy", "wash", "laundry", "kitchen", "bedroom", "bins", "garden", "cook", "dishes", "vacuum", "mop"], color: "#35704E" },
-  { id: "people",  words: ["call", "visit", "birthday", "friend", "mum", "mom", "dad", "kids", "school", "pick up", "pickup", "message", "text"], color: "#F2994A" },
-  { id: "errands", words: ["shop", "groceries", "buy", "post office", "pharmacy", "petrol", "fuel", "drop off", "collect"], color: "#20A39E" },
-  { id: "rest",    words: ["rest", "nap", "read", "bath", "breathe", "meditate", "break", "sit outside"], color: "#8E7CC3" }
+  { id: "money",   label: "Finance",  words: ["pay", "bill", "invoice", "bank", "tax", "rent", "budget", "quote", "price", "refund", "insurance", "savings", "loan", "salary", "mortgage", "super"], color: "#C9920E" },
+  { id: "pets",    label: "Pets",     words: ["dog", "cat ", "cats", "pet ", "pets", "puppy", "kitten", "litter", "groomer", "walk the dog", "feed the"], color: "#A0764B" },
+  { id: "health",  label: "Health",   words: ["doctor", "dentist", "medicine", "tablet", "pills", "gym", "walk", "run", "yoga", "therapist", "therapy", "physio", "vet", "appointment", "checkup", "check-up", "exercise", "swim", "stretch", "scan"], color: "#E85D75" },
+  { id: "family",  label: "Family",   words: ["family", "kids", "kid ", "son ", "daughter", "mum", "mom", "dad", "grandma", "grandpa", "nan ", "baby", "parent", "sister", "brother", "school run", "bedtime story"], color: "#D96AA7" },
+  { id: "school",  label: "School",   words: ["study", "exam", "homework", "assignment", "lecture", "essay", "revise", "revision", "uni ", "semester", "tutorial", "quiz", "course", "thesis", "school", "class "], color: "#2F80ED" },
+  { id: "work",    label: "Work",     words: ["work", "meeting", "email", "report", "client", "boss", "presentation", "spreadsheet", "call the office", "deadline", "project", "interview", "shift"], color: "#5B6BD5" },
+  { id: "home",    label: "Home",     words: ["clean", "tidy", "wash", "laundry", "kitchen", "bedroom", "bins", "garden", "cook", "dishes", "vacuum", "mop", "repair", "fix the"], color: "#35704E" },
+  { id: "travel",  label: "Travel",   words: ["flight", "hotel", "passport", "pack ", "packing", "trip", "holiday", "visa", "train", "airport", "booking"], color: "#00A3C4" },
+  { id: "people",  label: "Friends",  words: ["call", "visit", "birthday", "friend", "pick up", "pickup", "message", "text", "party", "dinner with", "coffee with", "catch up"], color: "#F2994A" },
+  { id: "errands", label: "Errands",  words: ["shop", "groceries", "buy", "post office", "pharmacy", "petrol", "fuel", "drop off", "collect", "return the"], color: "#20A39E" },
+  { id: "creative",label: "Creative", words: ["paint", "draw", "guitar", "piano", "practise", "practice", "craft", "photo", "design", "sketch", "journal", "compose"], color: "#C158DC" },
+  { id: "rest",    label: "Rest",     words: ["rest", "nap", "read", "bath", "breathe", "meditate", "break", "sit outside", "relax"], color: "#8E7CC3" }
 ];
 var DEFAULT_COLOR = "#7A8699";
+/* Prefix-on-a-word match: "run" finds "running" but not "prune"; a trailing
+   space in a word means "that whole word" ("cat " is not "category"). */
+function wordHit(t, w) {
+  var exact = /\s$/.test(w), core = w.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp("(^|[^a-z])" + core + (exact ? "([^a-z]|$)" : "")).test(t);
+}
 function categoryFor(title) {
-  var t = " " + String(title).toLowerCase() + " ";
+  var t = String(title).toLowerCase();
   for (var i = 0; i < CATEGORIES.length; i++) {
     for (var j = 0; j < CATEGORIES[i].words.length; j++) {
-      if (t.indexOf(CATEGORIES[i].words[j]) !== -1) return { id: CATEGORIES[i].id, color: CATEGORIES[i].color };
+      if (wordHit(t, CATEGORIES[i].words[j])) return { id: CATEGORIES[i].id, color: CATEGORIES[i].color, label: CATEGORIES[i].label };
     }
   }
-  return { id: "general", color: DEFAULT_COLOR };
+  return { id: "general", color: DEFAULT_COLOR, label: "Other" };
 }
+var CATEGORY_LIST = CATEGORIES.map(function (c) { return { id: c.id, label: c.label, color: c.color }; }).concat([{ id: "general", label: "Other", color: DEFAULT_COLOR }]);
 
 function estimateDuration(title) {
   var t = String(title).toLowerCase();
@@ -255,7 +267,7 @@ function streakInfo(days, today) {
 var api = {
   pad: pad, toKey: toKey, parseKey: parseKey, addDays: addDays, todayKey: todayKey,
   toMin: toMin, toHHMM: toHHMM, nudgeTime: nudgeTime,
-  categoryFor: categoryFor, estimateDuration: estimateDuration,
+  categoryFor: categoryFor, CATEGORY_LIST: CATEGORY_LIST, estimateDuration: estimateDuration,
   isBig: isBig, decompose: decompose, parseItem: parseItem, parseDump: parseDump,
   sortDay: sortDay, adaptDay: adaptDay, dayScore: dayScore,
   nextStepText: nextStepText, digestText: digestText, CATEGORIES: CATEGORIES,

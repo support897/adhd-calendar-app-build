@@ -23,6 +23,16 @@
   var AUTH_HOST = cfg.restAuth || "https://identitytoolkit.googleapis.com";
   var FS_HOST = cfg.restFirestore || "https://firestore.googleapis.com";
   var TOKEN_HOST = cfg.restToken || "https://securetoken.googleapis.com";
+  /* Firebase only accepts an http(s) requestUri. Inside the packaged
+     iPhone app the page origin is capacitor://localhost, which Firebase
+     rejects with INVALID_REQUEST_URI, so every native Google/Apple
+     sign-in failed after the OS sheet closed. Use the project's own
+     https address there. */
+  function okUri(u) {
+    var o = u || (typeof location !== "undefined" ? location.origin : "");
+    if (/^https?:\/\//i.test(o)) return o;
+    return "https://" + (cfg.authDomain || (cfg.projectId + ".firebaseapp.com"));
+  }
   function idpUrl(name) { return AUTH_HOST + "/v1/accounts:" + name + "?key=" + cfg.apiKey; }
   function friendly(code) {
     var map = {
@@ -47,9 +57,14 @@
   // through here. Known auth codes speak precisely via friendly();
   // anything else is classified by shape into a calm line.
   function userError(e) {
+    // An abort (the fetch bound firing) is a connection
+    // truth, checked FIRST: a DOMException carries a legacy
+    // numeric code that would otherwise fall into friendly()
+    // and read as a generic failure instead of no connection.
+    if (e && e.name === "AbortError") return "No connection right now. Your calendar is safe on this device.";
     if (e && e.code) return friendly(e.code);
     var m = (e && e.message) || "";
-    if ((e && e.name === "TypeError") || /failed to fetch|networkerror|load failed/i.test(m)) {
+    if ((e && (e.name === "TypeError" || e.name === "AbortError")) || /failed to fetch|networkerror|load failed/i.test(m)) {
       return "No connection right now. Your calendar is safe on this device.";
     }
     if (e && e.status === 403) {
@@ -58,8 +73,23 @@
     return "Something did not work. Try again.";
   }
 
+  // THE BOUND (fleet census, 19 Oct): no fetch in this layer
+  // waits forever. A stalled socket used to pend indefinitely
+  // — the door sat on "One moment…" and the boot reconcile
+  // wedged sync for the session. Every call now aborts at the
+  // limit and rejects, and userError already speaks the honest
+  // network line for exactly that shape.
+  function fetchT(url, opts, ms) {
+    var limit = ms || 15000;
+    if (typeof AbortController === "undefined") return fetch(url, opts);
+    var ctl = new AbortController();
+    var timer = setTimeout(function () { try { ctl.abort(); } catch (e) {} }, limit);
+    var o = {}; Object.keys(opts || {}).forEach(function (k) { o[k] = opts[k]; });
+    o.signal = ctl.signal;
+    return fetch(url, o).then(function (r) { clearTimeout(timer); return r; }, function (e) { clearTimeout(timer); throw e; });
+  }
   function authCall(name, body) {
-    return fetch(idpUrl(name), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    return fetchT(idpUrl(name), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
         if (!res.ok) { var code = (res.j && res.j.error && res.j.error.message) || "UNKNOWN"; var e = new Error(friendly(code)); e.code = code; throw e; }
@@ -81,12 +111,21 @@
   }
   function refresh() {
     if (!session) return Promise.reject(new Error("Not signed in."));
-    return fetch(TOKEN_HOST + "/v1/token?key=" + cfg.apiKey, {
+    return fetchT(TOKEN_HOST + "/v1/token?key=" + cfg.apiKey, {
       method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: "grant_type=refresh_token&refresh_token=" + encodeURIComponent(session.refreshToken),
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
-        if (!res.ok) { session = null; saveSession(); var e = new Error(friendly("TOKEN_EXPIRED")); e.code = "TOKEN_EXPIRED"; throw e; }
+        if (!res.ok) {
+          /* Stay signed in until the person signs out. Only a definite
+             "this login is gone" answer (revoked, deleted or disabled
+             account) ends the session. A busy server, a rate limit or a
+             hiccup keeps it and just fails this one call. */
+          var msg = String((res.j && res.j.error && res.j.error.message) || "");
+          var dead = /TOKEN_EXPIRED|INVALID_REFRESH_TOKEN|USER_DISABLED|USER_NOT_FOUND|CREDENTIAL_MISMATCH/.test(msg);
+          if (dead) { session = null; saveSession(); var e = new Error(friendly("TOKEN_EXPIRED")); e.code = "TOKEN_EXPIRED"; throw e; }
+          var e2 = new TypeError("Failed to fetch"); throw e2;
+        }
         session.idToken = res.j.id_token; session.refreshToken = res.j.refresh_token || session.refreshToken;
         session.expiresAt = Date.now() + (parseInt(res.j.expires_in, 10) || 3600) * 1000;
         saveSession(); return session;
@@ -132,7 +171,7 @@
     return token().then(function (tok) {
       var opts = { method: method, headers: { "Authorization": "Bearer " + tok, "Content-Type": "application/json" } };
       if (bodyObj) opts.body = JSON.stringify(bodyObj);
-      return fetch(fsBase() + path, opts).then(function (r) {
+      return fetchT(fsBase() + path, opts).then(function (r) {
         if (r.status === 404) return null;
         return r.json().then(function (j) {
           if (!r.ok) { var e = new Error((j.error && j.error.message) || "Firestore error"); e.status = r.status; throw e; }
@@ -151,7 +190,7 @@
     googleSignIn: function (idToken, requestUri) {
       return authCall("signInWithIdp", {
         postBody: "id_token=" + encodeURIComponent(idToken) + "&providerId=google.com",
-        requestUri: requestUri || location.origin, returnIdpCredential: true, returnSecureToken: true,
+        requestUri: okUri(requestUri), returnIdpCredential: true, returnSecureToken: true,
       }).then(function (j) { return adopt(j); });
     },
     appleSignIn: function (idToken, requestUri, nonce) {
@@ -162,7 +201,7 @@
          The web popup path passes no nonce, exactly as before. */
       return authCall("signInWithIdp", {
         postBody: "id_token=" + encodeURIComponent(idToken) + "&providerId=apple.com" + (nonce ? "&nonce=" + encodeURIComponent(nonce) : ""),
-        requestUri: requestUri || location.origin, returnIdpCredential: true, returnSecureToken: true,
+        requestUri: okUri(requestUri), returnIdpCredential: true, returnSecureToken: true,
       }).then(function (j) { return adopt(j); });
     },
     deleteAccount: function () { return token().then(function (tok) { return authCall("delete", { idToken: tok }); }).then(function () { session = null; saveSession(); }); },
@@ -178,7 +217,7 @@
        counter/feed collections — never for user state). */
     fsList: function (collectionPath) {
       return token().then(function (tok) {
-        return fetch(fsBase() + collectionPath + "?pageSize=1000", { headers: { "Authorization": "Bearer " + tok } })
+        return fetchT(fsBase() + collectionPath + "?pageSize=1000", { headers: { "Authorization": "Bearer " + tok } })
           .then(function (r) {
             if (r.status === 404) return [];
             return r.json().then(function (j) {
@@ -202,7 +241,7 @@
         }
         var q = { structuredAggregationQuery: { aggregations: [{ sum: { field: { fieldPath: field } }, alias: "s" }], structuredQuery: { from: [{ collectionId: collectionId }] } } };
         if (where) q.structuredAggregationQuery.structuredQuery.where = where;
-        return fetch(fsBase().replace(/documents\/$/, "") + "documents:runAggregationQuery", {
+        return fetchT(fsBase().replace(/documents\/$/, "") + "documents:runAggregationQuery", {
           method: "POST", headers: { "Authorization": "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify(q),
         }).then(function (r) {
           return r.json().then(function (j) {
@@ -225,7 +264,7 @@
         }
         var q = { structuredAggregationQuery: { aggregations: [{ count: {}, alias: "c" }], structuredQuery: { from: [{ collectionId: collectionId }] } } };
         if (where) q.structuredAggregationQuery.structuredQuery.where = where;
-        return fetch(fsBase().replace(/documents\/$/, "") + "documents:runAggregationQuery", {
+        return fetchT(fsBase().replace(/documents\/$/, "") + "documents:runAggregationQuery", {
           method: "POST", headers: { "Authorization": "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify(q),
         }).then(function (r) {
           return r.json().then(function (j) {

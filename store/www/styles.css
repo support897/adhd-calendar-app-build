@@ -176,7 +176,9 @@ h3 { font-family: var(--font-display); font-size: 18px; font-weight: 600; margin
 #app { display: flex; min-height: 100vh; }
 
 /* Sidebar: beside the content at every width. The user can hide it
-   completely; the small Pace mark then floats at the top left. */
+   completely; a plain menu button in the calendar topbar (and the
+   More tab) brings it back. No brand mark floats over the content —
+   the mark lives on the icon, the splash and the menu's own header. */
 #sidebar {
   width: 232px; flex: 0 0 auto;
   border-right: 1px solid var(--hair);
@@ -197,14 +199,12 @@ html[data-sb="collapsed"] #sidebar { display: none; }
 .icon-btn .ico { width: 18px; height: 18px; }
 .expand-btn {
   display: none;
-  position: fixed; top: calc(14px + var(--sat)); left: 14px; z-index: 50;
-  width: 42px; height: 42px; border-radius: 50%;
-  border: 1px solid var(--hair); background: var(--card);
-  align-items: center; justify-content: center;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+  width: 42px; height: 42px; border-radius: 50%; flex: 0 0 auto;
+  border: 1px solid var(--hair); background: var(--card); color: var(--ink-2);
+  align-items: center; justify-content: center; cursor: pointer;
 }
 html[data-sb="collapsed"] .expand-btn { display: inline-flex; }
-html[data-sb="collapsed"] #main { padding-left: 70px; }
+.topbar .month-title { margin-right: auto; }
 #sidebar nav { display: flex; flex-direction: column; gap: 2px; }
 .side-item {
   display: flex; align-items: center; gap: 10px;
@@ -298,6 +298,13 @@ html[data-sb="collapsed"] #main { padding-left: 70px; }
 .fc .fc-event.ev-calm, .fc .fc-event.ev-calm .fc-event-main, .fc .fc-event.ev-calm .fc-event-title, .fc .fc-event.ev-calm .fc-event-time { color: var(--ink) !important; }
 .fc .fc-daygrid-day-frame { min-height: 106px; }
 .fc .fc-day-other .fc-daygrid-day-number { opacity: 0.45; }
+/* Structured time grid (build 33): a slim time-label column and even
+   hour rows, timetable-style — no wide gutter, no stretched boxes. */
+.fc .fc-timegrid-axis { width: 46px; }
+.fc .fc-timegrid-axis-cushion { font-size: 11px; color: var(--ink-3); padding: 0 6px 0 0; text-align: right; }
+#calendar .fc-timegrid-slot { height: 26px; }
+.fc .fc-timegrid-slot-label-cushion { font-size: 11px; color: var(--ink-3); }
+#calendar .fc-timeGridDay-view .fc-daygrid-day-frame, #calendar .fc-timeGridWeek-view .fc-daygrid-day-frame { min-height: 28px; }
 .fc .fc-daygrid-more-link { color: var(--ink-3); font-size: 12px; font-weight: 600; padding: 2px 8px; }
 .fc .fc-timegrid-slot-label { font-size: 11px; color: var(--ink-3); }
 .fc .fc-list-event td { padding: 12px 14px; }
@@ -334,16 +341,50 @@ html[data-sb="collapsed"] #main { padding-left: 70px; }
 .task-row.dragging { opacity: 0.4; }
 .task-row .tr-dot { width: 11px; height: 11px; border-radius: 50%; margin-top: 5px; flex: 0 0 auto; }
 .task-row .tr-main { flex: 1 1 auto; min-width: 0; }
+.task-row .tr-actions { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 2px; }
+.task-row .task-move { width: 44px; height: 44px; flex: 0 0 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-3); font-size: 18px; }
+.task-row .task-move:hover { background: var(--ground-2); color: var(--ink); }
+.task-row .task-move:disabled { opacity: .35; cursor: default; }
 .task-row .tr-title { font-size: 16px; font-weight: 500; display: block; }
 .task-row .tr-meta { font-size: 13px; color: var(--ink-3); display: block; margin-top: 1px; }
-.task-row .tr-check { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--hair); background: var(--card); color: var(--steady); font-size: 15px; flex: 0 0 auto; line-height: 1; }
+.task-row .tr-check { width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid var(--hair); background: var(--card); color: var(--steady); font-size: 15px; flex: 0 0 44px; line-height: 1; }
+.task-row .tr-dot.has-icon { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin-top: 0; border-radius: 50%; font-size: 16px; }
+.task-note-section, .task-audio-section { margin: 14px 0; padding: 14px; border: 1px solid var(--hair); border-radius: 14px; background: var(--ground); }
+.task-note-section h4, .task-audio-section h4 { margin: 0 0 8px; font-size: 15px; }
+.task-note-section .field { margin: 8px 0; }
+.task-note-section textarea { width: 100%; min-height: 88px; border: 1px solid var(--hair); border-radius: 10px; background: var(--card); padding: 10px 12px; resize: vertical; line-height: 1.45; }
+.task-note-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.task-note-actions .hint { margin: 0; }
+.task-audio-section audio { display: block; width: 100%; margin-top: 10px; }
+.task-audio-section audio[hidden] { display: none; }
+.task-note-section [hidden], .task-audio-section [hidden] { display: none !important; }
+.task-look-details { margin: 14px 0; border: 1px solid var(--hair); border-radius: 14px; background: var(--ground); }
+.task-look-details > summary { min-height: 44px; padding: 12px 14px; cursor: pointer; color: var(--ink); font-weight: 600; }
+.task-look-body { padding: 0 14px 14px; }
+.task-look-body .field { margin-top: 4px; }
+.task-icon-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 7px; max-height: 190px; overflow-y: auto; padding: 8px 2px; }
+.task-icon-option { width: 44px; min-width: 44px; height: 44px; border: 1px solid var(--hair); border-radius: 12px; background: var(--card); color: var(--ink); font-size: 22px; padding: 0; }
+.task-icon-option.is-on { border: 2px solid var(--accent); background: var(--seg); box-shadow: 0 0 0 2px var(--card); }
+.task-icon-empty { grid-column: 1 / -1; margin: 4px 0; }
+.task-look-label { margin: 12px 0 4px; font-size: 13px; color: var(--ink-3); }
+.task-color-picker { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0 8px; }
+.task-color-option { width: 44px; height: 44px; flex: 0 0 44px; border: 2px solid var(--card); border-radius: 50%; box-shadow: 0 0 0 1px var(--hair); padding: 0; }
+.task-color-option.is-on { box-shadow: 0 0 0 3px var(--accent); }
+.task-custom-color { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: var(--ink-2); font-size: 14px; }
+.task-custom-color input[type="color"] { width: 42px; height: 44px; border: 0; background: transparent; padding: 2px; cursor: pointer; }
+.task-custom-color input[type="text"] { width: 80px; height: 40px; border: 1px solid var(--hair); border-radius: 8px; background: var(--card); color: var(--ink); padding: 6px 7px; font: inherit; font-size: 13px; }
 .task-row.is-done .tr-title { color: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
 .task-row.is-done .tr-check { background: var(--steady); border-color: var(--steady); color: #fff; animation: pop 0.3s ease; }
 .parked-note { color: var(--ink-3); font-size: 14px; padding: 12px 2px; }
 .stretch-note { padding: 12px 2px; font-size: 15px; border-bottom: 1px solid var(--hair); }
 .stretch-note button { border: 0; background: none; color: var(--accent); font-size: 15px; padding: 0; margin-left: 8px; }
 .empty-note { color: var(--ink-3); font-size: 15px; padding: 16px 2px; }
-.dock-note { display: flex; align-items: center; gap: 12px; }
+.dock-note { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.dock-note > span:not(.dock-skip) { flex: 1 1 calc(100% - 78px); }
+.dock-note .soft-btn { margin-left: 70px; min-height: 44px; }
+.carryover-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 12px 14px; margin: 10px 0; border: 1px solid var(--hair); border-radius: 14px; background: var(--card); }
+.carryover-card p { margin: 0; font-size: 14px; color: var(--ink-2); }
+.carryover-card .soft-btn { min-height: 44px; }
 .dock-skip { flex: none; opacity: 0.92; }
 .dock-skip .skip-svg { width: 58px; height: auto; display: block; }
 
@@ -356,7 +397,11 @@ html[data-sb="collapsed"] #main { padding-left: 70px; }
 .g-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hair); }
 .g-dot.is-on { background: var(--ink); }
 .guide-swatches { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
-.g-swatch { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--hair); cursor: pointer; padding: 0; }
+.g-swatch { width: 44px; height: 44px; min-width: 44px; border-radius: 50%; border: 2px solid var(--hair); cursor: pointer; padding: 0; }
+.guide-energy { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 12px 0; }
+.guide-energy-btn, .guide-action, .guide-card .sheet-actions button { min-height: 44px; }
+.guide-energy-btn[aria-pressed="true"] { border: 2px solid var(--accent); background: var(--seg); }
+.guide-target { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 14px; }
 .guide-card .sheet-actions { justify-content: center; }
 
 /* Capture */
@@ -473,6 +518,11 @@ html[data-cute="1"] .add-btn { border-radius: 16px; }
 /* THE DOOR PAGE (v4): the sign-up is the whole page — big,
    centred, nothing else around it. */
 .sheet.door-page { background: var(--bg, #F3F5FA); align-items: flex-start; overflow-y: auto; }
+/* THE DOOR LOCK (build 33, the ruling of 29 Oct): while no
+   session stands, the door is the only page — every piece of
+   app chrome stays undisplayed, toast included. lockDoor()
+   in app.js sets the attribute on locked boots only. */
+html[data-door="locked"] #main, html[data-door="locked"] #sidebar, html[data-door="locked"] #bottomTabs, html[data-door="locked"] #toast { display: none !important; }
 .door-inner { width: 100%; max-width: 430px; margin: auto; padding: 48px 26px 40px; }
 .door-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; margin-bottom: 28px; }
 .door-tile { width: 86px; height: 86px; border-radius: 24px; background: color-mix(in srgb, var(--accent) 16%, var(--card)); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
@@ -492,14 +542,16 @@ html[data-cute="1"] .add-btn { border-radius: 16px; }
 .door-topname { font-family: var(--font-display); font-weight: 800; font-size: 19px; }
 .door-back { width: 42px; height: 42px; flex: none; border: 1px solid var(--hair); border-radius: 50%; background: var(--card); color: var(--ink); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .door-back svg { width: 19px; height: 19px; }
-/* THE TOUR (v4): Skip's pop-up sits IN THE MIDDLE of the
-   app; at the menu stop it docks beside the open menu. */
-#guideSheet { align-items: center; }
-#guideSheet .guide-card { border-radius: 22px; margin: 0 14px; position: relative; padding-top: 44px; overflow: visible; max-height: none; }
-#guideSheet #guideArt { position: absolute; top: -34px; left: 50%; transform: translateX(-50%); width: 76px; height: 76px; border-radius: 50%; background: var(--card); border: 1px solid var(--hair); box-shadow: 0 8px 20px rgba(23, 32, 64, 0.14); display: flex; align-items: center; justify-content: center; overflow: hidden; }
-#guideSheet #guideArt svg { width: 62px; height: auto; }
+/* Setup guide: a calm, full-width bottom sheet, as shown in the visual guide. */
+#guideSheet { align-items: flex-end; justify-content: center; }
+#guideSheet .guide-card { border-radius: 22px 22px 0 0; margin: 0; position: relative; padding: 22px 26px calc(24px + var(--sab)); overflow-y: auto; width: 100%; max-width: 560px; max-height: 88vh; }
+#guideSheet #guideArt { position: relative; top: auto; left: auto; transform: none; width: auto; height: auto; border-radius: 0; background: transparent; border: 0; box-shadow: none; display: flex; align-items: center; justify-content: center; overflow: visible; margin: 0 auto 4px; pointer-events: none; }
+#guideSheet #guideArt svg { width: 148px; height: auto; }
 #guideSheet[data-dock="menu"] { align-items: flex-end; justify-content: flex-start; }
-#guideSheet[data-dock="menu"] .guide-card { margin: 0 0 14px 14px; max-width: 330px; }
+#guideSheet[data-dock="menu"] .guide-card { margin: 0 0 14px 14px; max-width: 330px; border-radius: 22px; }
+@media (prefers-reduced-motion: reduce) {
+  #guideSheet, #guideSheet .sheet-card { animation: none !important; transition: none !important; }
+}
 .tour-name-input { width: 100%; height: 50px; border: 1px solid var(--hair); border-radius: 14px; background: var(--card); color: var(--ink); padding: 0 14px; font: inherit; font-size: 16px; margin-top: 4px; }
 /* THE UPGRADE MOMENT + PLANS: the tour's own calm register —
    a centred card, Skip in his badge, words over pressure. */
@@ -544,7 +596,6 @@ html[data-cute="1"] .add-btn { border-radius: 16px; }
     display: block; position: fixed; top: 0; right: 0; bottom: 0;
     width: calc(100vw - min(84vw, 340px)); z-index: 45; cursor: pointer;
   }
-  html[data-sb="collapsed"] #main { padding-left: 66px; }
   #main { padding: calc(16px + var(--sat)) 16px calc(56px + var(--sab)); }
   .fc .fc-daygrid-day-frame { min-height: 80px; }
   /* Phone month: dots, not truncated words — the list below the month
@@ -565,7 +616,14 @@ html[data-cute="1"] .add-btn { border-radius: 16px; }
   .board { grid-template-columns: 1fr; }
   .sheet { align-items: flex-end; }
   .level-btn { padding: 10px 13px; font-size: 14.5px; }
-  .expand-btn { top: calc(10px + var(--sat)); left: 10px; }
+}
+@media (max-width: 420px) {
+  /* Keep task titles readable at 320px while preserving 44px controls. */
+  .task-row { display: grid; grid-template-columns: 11px minmax(0, 1fr); align-items: start; column-gap: 8px; row-gap: 6px; }
+  .task-row.has-task-icon { grid-template-columns: 28px minmax(0, 1fr); }
+  .task-row .tr-dot { grid-column: 1; grid-row: 1; margin-top: 5px; }
+  .task-row .tr-main { grid-column: 2; grid-row: 1; min-width: 0; }
+  .task-row .tr-actions { grid-column: 2; grid-row: 2; justify-self: end; }
 }
 @media (min-width: 701px) {
   .sheet { align-items: center; }
@@ -617,3 +675,148 @@ html[data-cute="1"] .add-btn { border-radius: 16px; }
 .icon-picker { display: flex; flex-wrap: wrap; gap: 8px; }
 .icon-pick { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--hair); background: var(--ground); color: var(--ink-2); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
 .icon-pick.is-on { border-color: var(--accent); color: var(--accent); background: var(--seg); }
+
+
+/* Calm, visible primary navigation; the full menu remains in More. */
+#main { padding-bottom: calc(82px + var(--sab)); }
+#bottomTabs {
+  position: fixed; z-index: 38; left: 0; right: 0; bottom: 0;
+  min-height: calc(62px + var(--sab)); padding: 4px 6px var(--sab);
+  display: flex; align-items: stretch; justify-content: center;
+  background: var(--card); border-top: 1px solid var(--hair);
+}
+#bottomTabs button {
+  flex: 1 1 0; min-width: 0; min-height: 52px; max-width: 150px;
+  border: 0; border-radius: 12px; background: transparent; color: var(--ink-2);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; font-size: 11px; line-height: 1.15; font-weight: 600;
+}
+#bottomTabs button .ico { width: 20px; height: 20px; vertical-align: 0; }
+#bottomTabs button.is-active { color: var(--accent-strong); background: var(--today-tint); }
+@media (min-width: 701px) {
+  #bottomTabs {
+    left: 50%; right: auto; bottom: calc(14px + var(--sab));
+    width: min(640px, calc(100vw - 32px)); min-height: 62px;
+    padding: 4px 10px; transform: translateX(-50%);
+    border: 1px solid var(--hair); border-radius: 18px;
+    box-shadow: 0 8px 28px rgba(26, 40, 35, .12);
+  }
+  #main { padding-bottom: 96px; }
+}
+
+/* ---------- goals + habit week (build 30) ---------- */
+.gf-weeks { margin: 2px 0 6px; }
+.gf-week { display: flex; gap: 10px; align-items: baseline; margin: 3px 0; font-size: 14px; }
+.goal-form { background: var(--card); border: 1px solid var(--hair); border-radius: var(--radius); padding: 16px; margin: 14px 0; display: flex; flex-direction: column; gap: 14px; }
+.gf-field { display: flex; flex-direction: column; gap: 6px; }
+.gf-label { font-size: 14px; color: var(--ink-2); font-weight: 600; }
+.goal-form input[type="text"], .goal-form input[type="date"], .goal-form select, .goal-form textarea { padding: 12px 14px; font-size: 16.5px; border: 1px solid var(--hair); border-radius: var(--radius); background: var(--ground); color: var(--ink); width: 100%; min-height: 44px; font-family: inherit; }
+.goal-form textarea { resize: vertical; }
+.gf-cats { display: flex; flex-wrap: wrap; gap: 8px; }
+.gf-cat { min-height: 44px; border: 1px solid var(--hair); background: var(--card); color: var(--ink); border-radius: 999px; padding: 8px 14px; font-size: 15px; cursor: pointer; }
+.gf-cat.is-on { border: 2px solid var(--accent); background: var(--seg); font-weight: 600; }
+.gf-err { color: var(--danger); font-size: 14px; min-height: 0; margin: 0; }
+.gf-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.gf-h { margin: 0; font-size: 20px; overflow-wrap: anywhere; }
+.gf-sum { margin: 0; color: var(--ink-2); line-height: 1.45; }
+.gf-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.gf-steps li { display: flex; gap: 10px; align-items: baseline; }
+.gs-date { flex: none; font-size: 13px; color: var(--ink-3); min-width: 84px; }
+.gs-title { overflow-wrap: anywhere; }
+.goal-today { margin: 10px 0; padding: 12px 14px; border-radius: var(--radius); background: var(--seg); font-weight: 600; }
+.goal-card { background: var(--card); border: 1px solid var(--hair); border-left: 5px solid var(--gc, var(--accent)); border-radius: var(--radius); padding: 15px; margin-top: 12px; animation: rise .25s ease both; }
+.goal-head { display: flex; gap: 12px; align-items: center; }
+.goal-emoji { font-size: 26px; flex: none; }
+.goal-title-wrap { display: flex; flex-direction: column; min-width: 0; }
+.goal-title { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.goal-chip { font-size: 13px; color: var(--ink-3); }
+.goal-bar { height: 12px; border-radius: 999px; background: var(--seg); overflow: hidden; margin: 12px 0 6px; }
+.goal-fill { height: 100%; background: var(--gc, var(--accent)); border-radius: 999px; transition: width .4s ease; }
+.goal-nums { font-size: 14px; color: var(--ink-2); }
+.goal-msg { margin: 8px 0 2px; font-size: 15px; }
+.goal-next { margin: 2px 0 8px; font-size: 14px; color: var(--ink-2); overflow-wrap: anywhere; }
+.goal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.goal-actions .soft-btn { min-height: 44px; }
+.goal-steps { margin-top: 10px; border-top: 1px solid var(--hair); padding-top: 8px; max-height: 340px; overflow-y: auto; }
+.gs-row { display: flex; gap: 10px; align-items: center; padding: 4px 0; }
+.gs-row.is-done .gs-title { text-decoration: line-through; color: var(--ink-3); }
+.gs-tick { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--ink-3); background: none; color: #fff; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; }
+.gs-row.is-done .gs-tick { background: var(--green); border-color: var(--green); }
+.gs-text { display: flex; flex-direction: column; min-width: 0; }
+.why-box { margin-top: 18px; color: var(--ink-2); font-size: 14.5px; line-height: 1.5; }
+.why-box summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+.habit-card { background: var(--card); border: 1px solid var(--hair); border-radius: var(--radius); padding: 15px; margin-top: 12px; animation: rise .25s ease both; }
+.habit-head { display: flex; align-items: center; gap: 12px; }
+.habit-sub { font-size: 13px; color: var(--ink-3); overflow-wrap: anywhere; }
+.habit-weekrow { display: flex; gap: 4px; margin: 14px 0 10px; }
+.hw-day { flex: 1 1 0; min-width: 38px; min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 0; background: none; padding: 0; cursor: pointer; color: var(--ink-2); }
+.hw-label { font-size: 13px; font-weight: 600; }
+.hw-dot { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--ink-3); display: flex; align-items: center; justify-content: center; color: #fff; }
+.hw-dot .ico { width: 18px; height: 18px; }
+.hw-day.is-done .hw-dot { background: var(--green); border-color: var(--green); animation: pop .3s ease; }
+.hw-day.is-today .hw-label { color: var(--accent); }
+.hw-day.is-today .hw-dot { box-shadow: 0 0 0 3px var(--seg); }
+.hw-day.is-future { opacity: .4; cursor: default; }
+.habit-stats { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; color: var(--ink-2); }
+.habit-stats strong { font-size: 20px; color: var(--ink); }
+.habit-msg { margin: 8px 0 0; font-size: 14.5px; color: var(--ink-2); }
+@media (max-width: 360px) { .hw-day { min-width: 36px; } .hw-dot { width: 30px; height: 30px; } .gs-date { min-width: 70px; } }
+
+.goal-form .soft-btn { align-self: flex-start; }
+.goal-form .hint:empty { display: none; }
+
+/* Sign-in doors: full-width, labelled, stacked (easier to read and tap) */
+.door-social { grid-template-columns: 1fr; }
+.door-social-btn { gap: 12px; font: inherit; font-weight: 700; font-size: 16px; }
+
+/* Settings accordion */
+#panel-settings { max-width: 720px; }
+.settings-group.sg-fold { max-width: none; border: 1px solid var(--hair); border-radius: 16px; background: var(--card); padding: 0; margin: 0 0 10px; overflow: hidden; }
+.settings-group.sg-fold > h3 { margin: 0; padding: 16px 18px; min-height: 56px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 17px; }
+.settings-group.sg-fold > h3::after { content: ""; width: 9px; height: 9px; border-right: 2px solid var(--ink-3); border-bottom: 2px solid var(--ink-3); transform: rotate(45deg); transition: transform .15s; margin-right: 4px; }
+.settings-group.sg-fold.is-open > h3::after { transform: rotate(-135deg); }
+.settings-group.sg-fold > h3:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.settings-group.sg-fold:not(.is-open) > .sg-body { display: none; }
+.settings-group.sg-fold > .sg-body { padding: 0 18px 18px; }
+
+/* Task sheet: the main actions first, everything else folded away */
+.task-more, .task-more-look .task-look-details { border: 1px solid var(--hair); border-radius: 14px; background: var(--card); margin: 10px 0 0; }
+.task-more > summary, .task-more-look .task-look-details > summary { padding: 14px 16px; min-height: 48px; cursor: pointer; font-weight: 600; list-style: none; display: flex; align-items: center; }
+.task-more > summary::-webkit-details-marker { display: none; }
+.task-more-body { padding: 0 16px 14px; }
+.task-more-look .task-look-details > .task-look-body { padding: 0 16px 14px; }
+.task-main-actions { margin: 14px 0 4px; }
+.task-end-actions { margin-top: 16px; }
+#dBreak { margin-top: 10px; }
+
+/* Wide screens: the Day view no longer leaves a huge empty column.
+   The time grid sits left; "up next" and today's list sit right. */
+@media (min-width: 1100px) {
+  #panel-calendar.is-active:has(.fc-timeGridDay-view:not([hidden])) {
+    display: grid; grid-template-columns: minmax(0, 1fr) 360px; column-gap: 28px; align-items: start; grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  }
+  #panel-calendar:has(.fc-timeGridDay-view) > .topbar,
+  #panel-calendar:has(.fc-timeGridDay-view) > #ticker,
+  #panel-calendar:has(.fc-timeGridDay-view) > #checkinCard { grid-column: 1 / -1; }
+  #panel-calendar:has(.fc-timeGridDay-view) > #calendarWrap { grid-column: 1; grid-row: 4 / span 2; }
+  #panel-calendar:has(.fc-timeGridDay-view) > #upNext { grid-column: 2; grid-row: 4; margin: 0 0 14px; padding: 18px; border: 1px solid var(--hair); border-radius: 18px; background: var(--card); }
+  #panel-calendar:has(.fc-timeGridDay-view) > #dayList { grid-column: 2; grid-row: 5; margin-top: 0; padding: 4px 18px 18px; border: 1px solid var(--hair); border-radius: 18px; background: var(--card); position: sticky; top: 16px; max-height: calc(100vh - 40px); overflow: auto; }
+  #panel-calendar:has(.fc-timeGridDay-view) > #dayList:empty { display: none; }
+}
+/* Lists on big screens: cards sit in a tidy centred column, not stuck to the left */
+@media (min-width: 900px) {
+  #panel-todo, #panel-habits, #panel-goals, #panel-progress { max-width: 820px; margin-left: auto; margin-right: auto; }
+  #panel-settings { margin-left: auto; margin-right: auto; }
+}
+
+/* Chips: tick-style choices (categories, reminders, repeat days) */
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.chip { min-height: 44px; padding: 0 16px; border: 1px solid var(--hair); border-radius: 999px; background: var(--card); color: var(--ink); font: inherit; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.chip.is-on { background: color-mix(in srgb, var(--accent) 16%, var(--card)); border-color: var(--accent); font-weight: 700; }
+.chip .chip-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.chip.chip-day { min-width: 44px; justify-content: center; padding: 0 10px; }
+.task-more select, #fRepeat { width: 100%; min-height: 48px; border: 1px solid var(--hair); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; padding: 0 12px; }
+.task-row[draggable="true"] { cursor: grab; }
+.task-row.drop-target, .todo-row.drop-target { box-shadow: 0 -3px 0 var(--accent) inset; }
+.task-row.dragging, .todo-row.dragging { opacity: 0.45; }
+.todo-row[draggable="true"] { cursor: grab; }
