@@ -1,12 +1,15 @@
-// Copy the Pace web app's runtime files into www/ for the store builds.
-// The web app in ../adhd-calendar-app stays the single source of truth;
-// the live site is never touched by the store package.
+// Copy the repository-root web app into the store's www/ bundle.
+// This script is path-independent: the root app stays the single source
+// of truth, and no live site is touched.
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-const SRC = "/home/hatch/workspace/adhd-calendar-app";
-const DST = "/home/hatch/workspace/pace-store/www";
-const FILES = ["index.html", "styles.css", "app.js", "logic.js", "fullcalendar.js", "i18n.js", "manifest.webmanifest", "service-worker.js", "icon.svg", "privacy.html", "support.html", "fonts/BricolageGrotesque.ttf", "fonts/Manrope.ttf", "calendar-import.js", "firebase-config.js", "firebase.js", "vendor/ical/ical.min.js"];
+import { fileURLToPath } from "url";
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const STORE_ROOT = path.resolve(SCRIPT_DIR, "..");
+const SRC = path.resolve(STORE_ROOT, "..");
+const DST = path.join(STORE_ROOT, "www");
+const FILES = ["index.html", "styles.css", "app.js", "logic.js", "goals.js", "goals-ui.js", "fullcalendar.js", "i18n.js", "manifest.webmanifest", "service-worker.js", "icon.svg", "privacy.html", "support.html", "fonts/BricolageGrotesque.ttf", "fonts/Manrope.ttf", "calendar-import.js", "calendar-export.js", "audio-notes.js", "firebase-config.js", "firebase.js", "billing-config.js", "billing.js", "vendor/ical/ical.min.js"];
 const VENDOR = path.join(SRC, "vendor", "tesseract");
 function vendorFiles(dir, prefix = "") {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
