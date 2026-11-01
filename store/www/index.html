@@ -119,6 +119,7 @@ try {
             <button data-view="year" data-i18n>Year</button>
             <button data-view="listWeek" data-i18n>Agenda</button>
           </div>
+          <button id="goalBtn" class="add-btn ghost" aria-label="Add a goal" data-i18n-aria title="Add a goal"><svg class="ico"><use href="#i-goal"/></svg></button>
           <button id="importBtn" class="add-btn ghost" aria-label="Bring my calendar in" data-i18n-aria title="Bring my calendar in"><svg class="ico"><use href="#i-calplus"/></svg></button>
           <button id="addBtn" class="add-btn" aria-label="Add a task" data-i18n-aria><svg class="ico"><use href="#i-plus"/></svg></button>
         </div>
@@ -225,7 +226,21 @@ try {
     <!-- SETTINGS PANEL -->
     <section class="panel" id="panel-settings">
       <header class="topbar"><h2 data-i18n>Settings</h2></header>
-      <div class="settings-group" id="accountGroup" hidden>
+      <div class="profile-card" id="profileCard">
+        <div class="pc-avatar" id="pcAvatar" aria-hidden="true">P</div>
+        <div class="pc-text"><strong id="pcName">Your account</strong><span id="pcEmail" class="pc-email"></span><span class="pc-badge" data-i18n>Free: every feature included</span></div>
+        <div class="pc-skip" id="pcSkip" aria-hidden="true"></div>
+      </div>
+      <div class="set-jump" role="group" aria-label="Jump to a section">
+        <button type="button" data-jump="accountGroup" data-i18n>Account</button>
+        <button type="button" data-jump="setLook" data-i18n>Look</button>
+        <button type="button" data-jump="setCheckin" data-i18n>Check-in</button>
+        <button type="button" data-jump="setNotif" data-i18n>Reminders</button>
+        <button type="button" data-jump="setTasks" data-i18n>Tasks</button>
+        <button type="button" data-jump="setHelp" data-i18n>Help</button>
+      </div>
+      <button type="button" id="settingsTour" class="soft-btn set-tour" data-i18n>Skip shows me around settings</button>
+            <div class="settings-group" id="accountGroup" hidden>
         <h3 data-i18n>Account</h3>
         <p class="hint" id="accountLine" data-i18n>You are using Pace on this device only.</p>
         <label class="row" id="profileNameRow" hidden data-i18n>Your name <input type="text" id="profileName" data-i18n-ph autocomplete="name" placeholder="How should we address you?"></label>
@@ -241,7 +256,7 @@ try {
         </div>
         <p class="hint" id="accountNote"></p>
       </div>
-      <div class="settings-group">
+      <div class="settings-group" id="setLook">
         <h3 data-i18n>How it looks</h3>
         <div class="swatches" role="group" aria-label="Colour theme">
           <button class="swatch" data-theme-set="white" data-i18n><span class="sw-dot" style="background:#ffffff;border:1px solid var(--hair)"></span>White</button>
@@ -262,14 +277,16 @@ try {
         <label class="row check" data-i18n><input type="checkbox" id="cuteToggle"> Cute mode</label>
         <label class="row check" data-i18n><input type="checkbox" id="sbToggle"> Menu open <span class="hint">The Pace mark brings it back.</span></label>
       </div>
-      <div class="settings-group">
+      <div class="settings-group" id="setCheckin">
         <h3 data-i18n>Morning check-in</h3>
+        <label class="row" data-i18n>I wake up at <input type="time" id="wakeTime" value="07:00"></label>
+        <label class="row" data-i18n>I wind down at <input type="time" id="windTime" value="22:00"></label>
         <label class="row" data-i18n>Ask me at <input type="time" id="checkinTime" value="08:00"></label>
         <label class="row" data-i18n>Bad day is called <input type="text" id="nameLow" value="Bad" maxlength="14"></label>
         <label class="row" data-i18n>Ok day is called <input type="text" id="nameSteady" value="Ok" maxlength="14"></label>
         <label class="row" data-i18n>Great day is called <input type="text" id="nameFull" value="Great" maxlength="14"></label>
       </div>
-      <div class="settings-group">
+      <div class="settings-group" id="setNotif">
         <h3 data-i18n>Notifications</h3>
         <p class="hint" id="notifStatus" data-i18n>Notifications are off.</p>
         <label class="row check" data-i18n><input type="checkbox" id="nCheckin"> Morning check-in reminder</label>
@@ -288,20 +305,20 @@ try {
         </div>
         <p class="hint" id="notifHint">Reminders fire while the app is open.</p>
       </div>
-      <div class="settings-group">
+      <div class="settings-group" id="setTasks">
         <h3 data-i18n>Your tasks</h3>
         <div class="draft-actions">
           <button id="clearSamples" class="soft-btn" data-i18n>Remove the sample tasks</button>
           <button id="guideAgain" class="soft-btn" data-i18n>Setup guide</button>
           <button id="importOpen2" class="soft-btn" data-i18n>Bring my calendar in</button>
           <button id="exportCalendarBtn" class="soft-btn" data-i18n>Save calendar as .ics</button>
-          <button id="plansOpen" class="soft-btn" data-i18n>Plans</button>
+          <button id="plansOpen" class="soft-btn" data-i18n hidden>Plans</button>
         </div>
         <p class="hint" data-i18n>On this device only.</p>
         <p id="exportCalendarHint" class="hint" data-i18n>Calendar export contains calendar tasks. Times use this device's local clock.</p>
         <p id="exportCalendarStatus" class="hint" role="status"></p>
       </div>
-      <div class="settings-group">
+      <div class="settings-group" id="setHelp">
         <h3 data-i18n>Help + privacy</h3>
         <div class="settings-links">
           <a class="soft-btn" href="support.html" data-i18n><svg class="ico"><use href="#i-chat"/></svg><span>Support</span></a>
@@ -330,9 +347,19 @@ try {
     <label class="field">
       <input type="text" id="quickText" data-i18n-ph placeholder="e.g. Ring the plumber tomorrow at 9am for 30 minutes" aria-label="Say it in one sentence">
     </label>
+    <div id="quickSuggest" class="qsuggest" role="group" aria-label="Quick add">
+      <button type="button" data-add="today">Today</button>
+      <button type="button" data-add="tomorrow">Tomorrow</button>
+      <button type="button" data-add="at 9am">Morning</button>
+      <button type="button" data-add="at 6pm">Evening</button>
+      <button type="button" data-add="every day">Every day</button>
+      <button type="button" data-add="for 30 minutes">30 min</button>
+      <button type="button" data-add="!!!">Important</button>
+    </div>
     <div id="quickPreview" class="quick-preview" hidden></div>
     <details class="details-fallback"><summary data-i18n>Or fill in the details</summary>
       <label class="field" data-i18n>Title <input type="text" id="fTitle"></label>
+      <label class="field" data-i18n>Link <input type="url" id="fLink" inputmode="url" placeholder="https://" autocomplete="off"></label>
       <div class="field-row">
         <label class="field" data-i18n>Date <input type="date" id="fDate"></label>
         <label class="field" data-i18n>Time <input type="time" id="fTime"></label>
@@ -354,6 +381,9 @@ try {
       <div id="fCatChips" class="chip-row" role="group" aria-label="Category"></div>
       <label class="row check" data-i18n><input type="checkbox" id="fEssential"> This one must not slip</label>
     </details>
+    <div class="field"><span class="gf-label" data-i18n>Remind me for this task</span>
+      <div id="fRemChips" class="chip-row" role="group" aria-label="Reminders for this task" data-i18n-aria></div>
+      <span class="hint" data-i18n>Reminders need a time. Each task keeps its own.</span></div>
     <div class="sheet-actions">
       <button id="addCancel" class="soft-btn" data-i18n>Cancel</button>
       <button id="addSave" class="primary-btn" data-i18n>Add task</button>
@@ -384,6 +414,8 @@ try {
     <details class="task-more" id="dNotesWrap"><summary data-i18n>Notes and audio</summary>
       <div class="task-more-body"><section class="task-note-section" aria-labelledby="dNotesHeading">
       <h4 id="dNotesHeading" data-i18n>Notes</h4>
+      <label class="field"><span>Link</span><input type="url" id="dLink" inputmode="url" placeholder="https://" autocomplete="off"></label>
+      <div id="dLinks" class="task-links" aria-live="polite"></div>
       <label class="field"><span data-i18n>Written note</span><textarea id="dNotes" rows="3" maxlength="4000" placeholder="Add a note" data-i18n-ph aria-label="Task note" data-i18n-aria></textarea></label>
       <div class="task-note-actions"><button id="dNotesSpeak" class="soft-btn" type="button"><svg class="ico"><use href="#i-mic"/></svg><span data-i18n>Speak note</span></button><p id="dNotesStatus" role="status" class="hint"></p></div>
     </section>
@@ -618,6 +650,23 @@ try {
   </div>
 </div>
 
+<div id="shareSheet" class="sheet" hidden>
+  <div class="sheet-card">
+    <h3 data-i18n>Share goal</h3>
+    <div id="sgBody"></div>
+    <div class="sheet-actions">
+      <button id="shareClose" class="soft-btn" data-i18n>Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="joinSheet" class="sheet" hidden>
+  <div class="sheet-card">
+    <h3 data-i18n>Join goal</h3>
+    <div id="joinBody"></div>
+  </div>
+</div>
+
 <div id="toast" class="toast" hidden></div>
 
 <script src="fullcalendar.js"></script>
@@ -633,7 +682,9 @@ try {
 <script src="billing-config.js"></script>
 <script src="billing.js"></script>
 <script src="firebase.js"></script>
+<script src="sharing.js"></script>
 <script src="app.js"></script>
 <script src="goals-ui.js"></script>
+<script src="sharing-ui.js"></script>
 </body>
 </html>

@@ -298,6 +298,8 @@ function durationLabel(task) { return task && task.allDay ? tr("All day") : tr("
 function defaultSettings() {
   return {
     checkinTime: "08:00",
+    wakeTime: "07:00",
+    windTime: "22:00",
     names: { low: "Bad", steady: "Ok", full: "Great" },
     notif: { perm: "off", checkin: true, start: true, setup: 5, digest: true, digestTimes: ["12:30", "16:30"], done: false, doneTime: "20:00" },
     pausedDate: null,
@@ -752,6 +754,7 @@ function toggleDone(id, dateKey) {
     t.doneDates = t.doneDates || [];
     var i = t.doneDates.indexOf(dateKey);
     if (i === -1) t.doneDates.push(dateKey); else t.doneDates.splice(i, 1);
+    if (t.habitId) { var hb = (state.habits || []).filter(function (x) { return x.id === t.habitId; })[0]; if (hb) { hb.days = hb.days || {}; if (i === -1) hb.days[dateKey] = true; else delete hb.days[dateKey]; } }
   } else {
     t.status = t.status === "done" ? "todo" : "done";
     // QA NIGHT F2: the payload also carries a done flag (load()
@@ -762,6 +765,9 @@ function toggleDone(id, dateKey) {
     if (t.status === "done") toast(tr("Done. That counts."));
   }
   save(); refreshAll();
+  // Shared goals (build 39): a tick on a shared step writes
+  // through to the shared doc, so the whole team sees it.
+  if (!t.repeat && window.PaceShareUI) window.PaceShareUI.onLocalTick(t);
 }
 /* Move one occurrence of a (possibly repeating) task to another date. */
 function moveInstance(t, fromKey, toKey) {
@@ -778,6 +784,11 @@ function moveInstance(t, fromKey, toKey) {
   return t;
 }
 
+/* Structured-style day edges: the calendar shades the hours before you wake and after you wind down. */
+function dayHours() {
+  var st = state.settings || {};
+  return { daysOfWeek: [0, 1, 2, 3, 4, 5, 6], startTime: st.wakeTime || "07:00", endTime: st.windTime || "22:00" };
+}
 /* ---------- up next ---------- */
 function renderUpNext() {
   var el = $("upNext");
@@ -789,13 +800,15 @@ function renderUpNext() {
   var next = timed[0] || ad.visible[0];
   if (!next) { el.hidden = true; return; }
   el.hidden = false;
+  var gapMin = (next.time && L.toMin(next.time) > nowMin) ? L.toMin(next.time) - nowMin : 0;
+  var gapTxt = gapMin >= 30 ? '<span class="un-gap">Free for ' + (gapMin >= 60 ? Math.floor(gapMin / 60) + "h " : "") + (gapMin % 60 ? (gapMin % 60) + "m" : "") + ' before this</span>' : "";
   var firstStep = (next.steps && next.steps.some(function (s) { return !s.done; })) ? L.nextStepText(next) : "";
   // The step sentence reads WHOLE, on its own line (PACE-016:
   // the Start pill used to flow inline inside it and split the
   // sentence around the button). With a step standing, the
   // pill takes its own row under the sentence; without one it
   // keeps its designed spot at the end of the title line.
-  el.innerHTML = '<span class="un-label">' + tr("Up next") + '</span><strong>' + esc(next.displayTitle || next.title) + "</strong> · " + durationLabel(next) +
+  el.innerHTML = '<span class="un-label">' + tr("Up next") + '</span>' + gapTxt + '<strong>' + esc(next.displayTitle || next.title) + "</strong> · " + durationLabel(next) +
     (next.time ? " · " + next.time : "") + (firstStep ? '<span class="un-step">' + esc(firstStep) + "</span>" : "") + '<button data-un="' + next.id + '"' + (firstStep ? ' class="un-start"' : "") + ">" + tr("Start") + '</button>';
   el.querySelector("[data-un]").addEventListener("click", function () {
     var t = baseTask(next.id); if (t) { t.status = "doing"; save(); refreshAll(); toast(tr("Started. One step at a time.")); }
@@ -812,6 +825,9 @@ function renderCheckin() {
   var sl = $("sideLevel");
   var todayLevel = state.feelings[L.todayKey()];
   sl.innerHTML = todayLevel ? tr("Today:") + " <strong>" + esc(displayLevelName(todayLevel)) + "</strong>" : tr("No check-in yet today");
+  var adc = adaptedFor(selected), tot = adc.visible.length + adc.parked.length;
+  var subEl = $("checkinSub");
+  if (subEl && state.feelings[selected]) subEl.textContent = adc.parked.length ? tr("Showing {a} of {b}. {c} resting until you feel up to it. You can change this any time.", { a: adc.visible.length, b: tot, c: adc.parked.length }) : tr("Showing everything for today. You can change this any time.");
   $("checkinQ").textContent = selected === L.todayKey() ? tr("How are you feeling today?") : tr("How does this day feel?");
 }
 document.querySelectorAll(".level-btn").forEach(function (b) {
@@ -829,7 +845,14 @@ document.querySelectorAll(".level-btn").forEach(function (b) {
 /* ---------- calendar ---------- */
 function fcEvents() {
   var a = L.addDays(selected, -45), b = L.addDays(selected, 80);
+  /* The calendar follows the feeling (build 34): each day is adapted at ITS
+     level. Showing tasks keep their place (small version on a Bad day); resting
+     tasks stay on the calendar, faded and dashed, never deleted. */
+  var adaptCache = {};
+  function adaptOf(key) { return adaptCache[key] || (adaptCache[key] = (function () { var ad = adaptedFor(key), m = {}; ad.visible.forEach(function (x) { m[x.id] = x; }); return { map: m, level: levelFor(key) }; })()); }
   return instancesInRange(a, b).map(function (t) {
+    var ao = adaptOf(t.instanceDate), shown = ao.map[t.id], resting = t.status !== "done" && !shown;
+    if (shown && shown.displayTitle) t = Object.assign({}, t, { title: shown.displayTitle, durationMin: shown.autoVersion ? shown.durationMin : (shown.shrunk ? Math.min(t.durationMin, 5) : t.durationMin) });
     var ev = { id: t.id + "@" + t.instanceDate, taskId: t.id, instanceDate: t.instanceDate, title: (t.icon ? t.icon + " " : "") + t.title, allDay: !t.time, backgroundColor: t.color, borderColor: t.color, extendedProps: { taskId: t.id, instanceDate: t.instanceDate } };
     if (t.time) {
       var startMin = L.toMin(t.time);
@@ -838,6 +861,7 @@ function fcEvents() {
       if (startMin + t.durationMin >= 1440) { ev.end = L.addDays(t.instanceDate, 1) + "T" + L.toHHMM(startMin + t.durationMin) + ":00"; }
     } else { ev.start = t.instanceDate; }
     if (t.status === "done") ev.classNames = ["ev-done"];
+    else if (resting) ev.classNames = ["ev-resting"];
     return ev;
   });
 }
@@ -850,9 +874,10 @@ function initCalendar() {
     headerToolbar: false,
     editable: true,
     dayMaxEvents: 3,
+    businessHours: dayHours(),
     slotMinTime: "06:00:00",
     slotMaxTime: "22:00:00",
-    scrollTime: "07:30:00",
+    scrollTime: (function () { var h = Math.max(6, new Date().getHours() - 1); return (h < 10 ? "0" : "") + h + ":00:00"; })(),
     eventDidMount: function (info) {
       var c = info.event.backgroundColor || "#5b6bd5";
       info.el.classList.add("ev-calm");
@@ -866,7 +891,34 @@ function initCalendar() {
     eventDurationEditable: true,
     longPressDelay: 250,
     events: fcEvents(),
-    dateClick: function (info) { selectDate(info.dateStr.slice(0, 10), false); },
+    eventMinHeight: 34,
+    eventContent: function (arg) {
+      var v = arg.view.type;
+      if (v === "dayGridMonth") return;
+      var ep = arg.event.extendedProps || {}, isDone = (arg.event.classNames || []).indexOf("ev-done") >= 0 || (arg.el && arg.el.classList.contains("ev-done"));
+      var wrap = document.createElement("div"); wrap.className = "ev-row";
+      var chk = document.createElement("button"); chk.type = "button"; chk.className = "ev-check" + (isDone ? " is-on" : "");
+      chk.setAttribute("aria-label", tr("Mark done")); chk.setAttribute("aria-pressed", String(!!isDone)); chk.innerHTML = isDone ? icon("i-check") : "";
+      ["mousedown", "touchstart", "pointerdown"].forEach(function (n) { chk.addEventListener(n, function (e) { e.stopPropagation(); }); });
+      chk.addEventListener("click", function (e) { e.stopPropagation(); e.preventDefault(); toggleDone(ep.taskId, ep.instanceDate); });
+      var body = document.createElement("span"); body.className = "ev-body";
+      var t = document.createElement("span"); t.className = "ev-t"; t.textContent = arg.event.title;
+      var emo = taskEmoji(arg.event.title); if (emo) wrap.setAttribute("data-emo", emo);
+      body.appendChild(t);
+      var bt = baseTask(ep.taskId);
+      if (bt && v !== "timeGridWeek") { var m = document.createElement("span"); m.className = "ev-m"; m.textContent = [bt.time, durationLabel(bt)].filter(Boolean).join(" \u00b7 "); body.appendChild(m); }
+      wrap.appendChild(chk); wrap.appendChild(body);
+      return { domNodes: [wrap] };
+    },
+    dateClick: function (info) {
+      selectDate(info.dateStr.slice(0, 10), false);
+      if (!info.allDay && info.dateStr.length > 10 && /timeGrid/.test(info.view.type)) {
+        $("addBtn").click();
+        $("fDate").value = info.dateStr.slice(0, 10);
+        $("fTime").value = info.dateStr.slice(11, 16);
+        var dt = document.querySelector("#addSheet details"); if (dt) dt.open = true; var ft = $("fTitle"); if (ft) ft.focus();
+      }
+    },
     eventClick: function (info) { openTask(info.event.extendedProps.taskId, info.event.extendedProps.instanceDate); },
     eventDrop: function (info) {
       var t = baseTask(info.event.extendedProps.taskId); if (!t) return;
@@ -908,6 +960,10 @@ function selectDate(key, jumpCalendar) {
   if (calendar && jumpCalendar) calendar.gotoDate(key);
   renderTicker(); renderDayList(); renderUpNext(); renderCheckin(); renderYear();
 }
+$("goalBtn").addEventListener("click", function () {
+  var side = document.querySelector('.side-item[data-panel="goals"]'); if (side) side.click();
+  setTimeout(function () { var b = $("goalNewBtn"); if (b) b.click(); }, 60);
+});
 $("monthTitle").addEventListener("click", function () { selectDate(L.todayKey(), true); });
 document.querySelectorAll(".segmented button").forEach(function (b) {
   b.addEventListener("click", function () {
@@ -961,6 +1017,10 @@ document.querySelectorAll(".side-item").forEach(function (b) {
     $("panel-" + panelName).classList.add("is-active");
     setBottomTab(panelName === "calendar" ? (selected === L.todayKey() && currentView === "timeGridDay" ? "today" : "calendar") : (panelName === "todo" || panelName === "capture" ? panelName : "more"));
     if (panelName === "progress") renderProgress();
+    // Opening Goals always re-renders it (build 39): shared
+    // goals arrive async, so the section must draw on arrival
+    // at the panel, not only on data events.
+    if (panelName === "goals" && window.PaceGoalsUI) window.PaceGoalsUI.renderGoals();
     // FullCalendar sizes itself while visible. Returning from a
     // hidden panel must re-measure after the calendar has its width.
     if (panelName === "calendar" && calendar) {
@@ -1012,8 +1072,20 @@ document.querySelectorAll("#bottomTabs [data-tab]").forEach(function (b) {
 /* ---------- quick add ---------- */
 var addCat = null;
 function pickAddCat(c) { addCat = c; renderCatChips($("fCatChips"), c ? c.id : null, pickAddCat, true); }
+var addRemind = [];
+function renderAddRemind() {
+  var box = $("fRemChips"); if (!box) return;
+  box.innerHTML = "";
+  REMIND_MINS.forEach(function (m) {
+    box.appendChild(chipButton(remindLabel(m), addRemind.indexOf(m) !== -1, function () {
+      var i = addRemind.indexOf(m); if (i === -1) addRemind.push(m); else addRemind.splice(i, 1);
+      addRemind = cleanLeads(addRemind); renderAddRemind();
+    }));
+  });
+}
 $("addBtn").addEventListener("click", function () {
-  $("quickText").value = ""; $("fTitle").value = "";
+  addRemind = defaultLeads().slice(); renderAddRemind();
+  $("quickText").value = ""; $("fTitle").value = ""; $("fLink").value = "";
   $("fDate").value = selected; $("fTime").value = ""; $("fDur").value = 25;
   $("fMin").value = ""; $("fFull").value = ""; $("fEssential").checked = false;
   $("quickPreview").hidden = true;
@@ -1031,28 +1103,43 @@ $("quickText").addEventListener("input", function () {
   var item = L.parseItem(v, selected);
   if (!item) { $("quickPreview").hidden = true; return; }
   $("quickPreview").hidden = false;
-  $("quickPreview").innerHTML = "<strong>" + esc(item.title) + "</strong><br>" +
-    esc(L.parseKey(item.date).toLocaleDateString(LOCALE, { weekday: "short", day: "numeric", month: "short" })) +
-    (item.time ? tr(" at {time}", { time: item.time }) : item.allDay ? "" : tr(" · no time yet")) + " · " + durationLabel(item) +
-    (item.repeat ? " · " + esc(item.repeat) : "") + (item.essential ? " · must not slip" : "");
+  var chip = function (cls, t) { return '<span class="qchip ' + cls + '">' + esc(t) + '</span>'; };
+  var rem = (item.time && !item.allDay) ? chip("qc-rem", "Reminder " + (leadsFor(item)[0] || 10) + " min before") : "";
+  $("quickPreview").innerHTML = "<strong>" + esc(item.title) + "</strong><div class=\"qchips\">" +
+    chip("qc-date", L.parseKey(item.date).toLocaleDateString(LOCALE, { weekday: "short", day: "numeric", month: "short" })) +
+    (item.time ? chip("qc-time", tr("at {time}", { time: item.time })) : item.allDay ? "" : chip("qc-none", tr("no time yet"))) +
+    chip("qc-dur", durationLabel(item)) +
+    (item.repeat ? chip("qc-rep", "Repeats " + item.repeat) : "") + rem +
+    (item.priority ? chip("qc-ess", "Priority " + ["", "low", "medium", "high"][item.priority]) : "") +
+    (item.essential ? chip("qc-ess", "must not slip") : "") + "</div>";
+});
+document.querySelectorAll("#quickSuggest [data-add]").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var inp = $("quickText"), add = b.getAttribute("data-add");
+    inp.value = (inp.value.replace(/\s+$/, "") + (add === "!!!" ? "" : " ") + add).trim();
+    inp.dispatchEvent(new Event("input", { bubbles: true })); inp.focus();
+  });
 });
 $("addSave").addEventListener("click", function () {
   // A smallest version typed at creation is a teach (Plus);
   // refused, the task still saves — without the taught version.
   var minV = $("fMin").value.trim();
   if (minV && !plusGate("steps")) minV = "";
-  var task = null;
+  var task = null, qLink = "";
   var manualTitle = $("fTitle").value.trim();
   if (manualTitle) {
     var cat = L.categoryFor(manualTitle);
     task = { title: manualTitle, date: $("fDate").value || selected, time: $("fTime").value || null, durationMin: Math.max(5, +$("fDur").value || 25), priority: 0, repeat: null, category: cat.id, color: cat.color, essential: $("fEssential").checked, steps: L.decompose(manualTitle, +$("fDur").value || 25, false), minVersion: minV, fullVersion: $("fFull").value.trim() };
   } else if ($("quickText").value.trim()) {
-    var item = L.parseItem($("quickText").value.trim(), selected);
+    var qs = splitLink($("quickText").value.trim()); qLink = qs.link;
+    var item = L.parseItem(qs.text, selected);
     if (item) task = { title: item.title, date: item.date, time: item.time, durationMin: item.durationMin, priority: item.priority, repeat: item.repeat, category: item.category, color: item.color, essential: item.essential, steps: item.steps, minVersion: minV, fullVersion: $("fFull").value.trim() };
   }
   if (!task) { toast(tr("Give it a title first, even a messy one.")); return; }
   if ($("fRepeat").value) task.repeat = $("fRepeat").value;
+  var fl = cleanUrl($("fLink").value) || qLink; if (fl) task.link = fl;
   if (addCat) { task.category = addCat.id; task.color = addCat.color; }
+  task.remind = cleanLeads(addRemind); /* its own reminders, not the general setting */
   task.id = uid(); task.status = "todo"; task.source = "manual"; task.originalText = $("quickText").value.trim(); task.skipDates = []; task.doneDates = [];
   state.tasks.push(task); save(); markActivated("event");
   $("addSheet").hidden = true;
@@ -1064,7 +1151,41 @@ $("addSave").addEventListener("click", function () {
   }
 });
 
+/* Links and phone numbers in a task (Structured: "notes, meeting links or phone numbers"). */
+function cleanUrl(u) {
+  u = String(u || "").trim(); if (!u) return "";
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) { if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(u)) u = "https://" + u; else return ""; }
+  return /^https?:\/\//i.test(u) ? u.slice(0, 500) : "";
+}
+function splitLink(text) {
+  var m = String(text || "").match(/https?:\/\/\S+/i);
+  if (!m) return { text: text, link: "" };
+  return { text: String(text).replace(m[0], " ").replace(/\s+/g, " ").trim(), link: cleanUrl(m[0]) };
+}
+function linksOf(t) {
+  var out = [], seen = {};
+  function add(kind, val, label) { if (val && !seen[val]) { seen[val] = 1; out.push({ kind: kind, val: val, label: label }); } }
+  if (t.link) add("url", t.link, t.link.replace(/^https?:\/\/(www\.)?/i, "").slice(0, 40));
+  var notes = String(t.notes || "");
+  (notes.match(/https?:\/\/[^\s<>"]+/gi) || []).forEach(function (u) { var c = cleanUrl(u); add("url", c, c.replace(/^https?:\/\/(www\.)?/i, "").slice(0, 40)); });
+  (notes.match(/\+?\d[\d\s().-]{6,}\d/g) || []).forEach(function (p) { var d = p.replace(/[^\d+]/g, ""); if (d.length >= 7 && d.length <= 15) add("tel", "tel:" + d, p.trim()); });
+  return out;
+}
+function renderTaskLinks(t) {
+  var box = $("dLinks"); if (!box) return;
+  box.innerHTML = "";
+  linksOf(t).forEach(function (l) {
+    var a = document.createElement("a"); a.className = "task-link-chip"; a.href = l.val; a.textContent = (l.kind === "tel" ? "Call " : "Open ") + l.label;
+    if (l.kind === "url") { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+    box.appendChild(a);
+  });
+}
 /* ---------- task sheet ---------- */
+
+["dNotes", "dLink"].forEach(function (id) {
+  var el = $(id); if (!el) return;
+  el.addEventListener("input", function () { var t = baseTask(currentTaskId); if (t) renderTaskLinks({ link: cleanUrl($("dLink").value), notes: $("dNotes").value }); });
+});
 function openTask(id, instanceDate) {
   var t = baseTask(id); if (!t) return;
   currentTaskId = id; currentInstanceDate = instanceDate || t.date;
@@ -1086,6 +1207,7 @@ function openTask(id, instanceDate) {
   $("dMeta").textContent = meta.join(" · ");
   renderSteps(t);
   $("dNotes").value = typeof t.notes === "string" ? t.notes : "";
+  $("dLink").value = t.link || ""; renderTaskLinks(t);
   renderTaskAudio(t);
   $("dMin").value = t.minVersion || "";
   $("dFull").value = t.fullVersion || "";
@@ -1303,6 +1425,7 @@ function persistSheetFields() {
   t.minVersion = taught;
   t.fullVersion = $("dFull").value.trim();
   t.notes = $("dNotes").value.trim();
+  t.link = cleanUrl($("dLink").value);
   t.time = $("dTime").value || null;
   if (t.time) t.allDay = false;
   t.durationMin = Math.max(5, +$("dDur").value || t.durationMin);
@@ -1667,10 +1790,38 @@ function addTodo(text) {
 function todoLinked(item) {
   return !!(item.calTaskId && state.tasks.some(function (t) { return t.id === item.calTaskId; }));
 }
+/* Next free slot today: after now (and after wake time), before wind-down, clear of every timed task. */
+function nextFreeSlot(dur, key) {
+  key = key || L.todayKey();
+  var st = state.settings || {}, now = new Date();
+  var from = L.toMin(st.wakeTime || "07:00"), to = L.toMin(st.windTime || "22:00");
+  if (key === L.todayKey()) from = Math.max(from, Math.ceil((now.getHours() * 60 + now.getMinutes() + 5) / 15) * 15);
+  var busy = tasksOn(key).filter(function (t) { return t.time && t.status !== "done"; }).map(function (t) { var b = L.toMin(t.time); return [b, b + (t.durationMin || 25)]; }).sort(function (x, y) { return x[0] - y[0]; });
+  var at = from;
+  for (var i = 0; i < busy.length; i++) { if (busy[i][1] <= at) continue; if (busy[i][0] >= at + dur) break; at = Math.ceil(busy[i][1] / 5) * 5; }
+  if (at + dur > to) return null;
+  return L.pad(Math.floor(at / 60)) + ":" + L.pad(at % 60);
+}
+var ICON_WORDS = [
+  [/\b(call|phone|ring)\b/, "\u260e\ufe0f"], [/\b(email|mail|message|text|reply|dm)\b/, "\u2709\ufe0f"],
+  [/\b(meet|meeting|standup|zoom|interview)\b/, "\ud83d\udc65"], [/\b(gym|workout|run|walk|exercise|yoga|swim|stretch)\b/, "\ud83c\udfcb\ufe0f"],
+  [/\b(eat|lunch|dinner|breakfast|cook|meal|snack)\b/, "\ud83c\udf7d\ufe0f"], [/\b(buy|shop|shopping|groceries|order)\b/, "\ud83d\uded2"],
+  [/\b(study|read|homework|exam|class|learn)\b/, "\ud83d\udcda"], [/\b(write|report|essay|draft|plan|prep)\b/, "\u270f\ufe0f"],
+  [/\b(doctor|dentist|medicine|pills|appointment|therapy)\b/, "\ud83e\ude7a"], [/\b(clean|tidy|laundry|dishes|vacuum)\b/, "\ud83e\uddf9"],
+  [/\b(pay|rent|bill|invoice|tax|bank)\b/, "\ud83d\udcb3"], [/\b(sleep|nap|rest|bed)\b/, "\ud83c\udf19"],
+  [/\b(drive|car|flight|travel|trip|pack)\b/, "\ud83d\ude97"], [/\b(kid|school|pickup|mum|dad|family)\b/, "\ud83c\udfe0"]
+];
+function taskEmoji(title) { var t = String(title || "").toLowerCase(); for (var i = 0; i < ICON_WORDS.length; i++) if (ICON_WORDS[i][0].test(t)) return ICON_WORDS[i][1]; return ""; }
+function planTodosIntoDay() {
+  var n = 0;
+  state.todos.forEach(function (item) { if (item.done || todoLinked(item)) return; if (linkTodo(item)) n++; });
+  return n;
+}
 function linkTodo(item) {
   if (todoLinked(item)) return false;
   var cat = L.categoryFor(item.text);
-  var task = { id: uid(), title: item.text, date: L.todayKey(), time: null, durationMin: 25, priority: 0, repeat: null, category: cat.id, color: cat.color, essential: false, status: "todo", steps: L.decompose(item.text, 25, false), minVersion: "", fullVersion: "", source: "todo", originalText: "", skipDates: [], doneDates: [] };
+  var slotDur = Math.min(L.estimateDuration ? L.estimateDuration(item.text) : 15, 45) || 15; var slotAt = nextFreeSlot(slotDur);
+  var task = { id: uid(), title: item.text, date: L.todayKey(), time: slotAt, durationMin: slotDur, priority: 0, repeat: null, category: cat.id, color: cat.color, essential: false, status: "todo", steps: L.decompose(item.text, 25, false), minVersion: "", fullVersion: "", source: "todo", originalText: "", skipDates: [], doneDates: [] };
   state.tasks.push(task);
   item.calTaskId = task.id;
   markActivated("event");
@@ -1683,6 +1834,7 @@ function renderTodos() {
   state.todos.forEach(function (item) {
     var row = document.createElement("div");
     row.className = "todo-row" + (item.done ? " is-done" : "");
+    row.setAttribute("data-id", item.id);
     row.draggable = true;
     row.addEventListener("dragstart", function (e) { row.classList.add("dragging"); e.dataTransfer.setData("text/plain", "todo:" + item.id); });
     row.addEventListener("dragend", function () { row.classList.remove("dragging"); });
@@ -1698,11 +1850,35 @@ function renderTodos() {
       save(); renderTodos();
     });
     row.innerHTML =
+      '<button class="todo-grip" data-act="grip" type="button" aria-label="Hold and drag to reorder">&#8942;&#8942;</button>' +
       '<button class="todo-tick" data-act="tick" aria-label="' + tr("Mark done") + '">' + (item.done ? icon("i-check") : "") + "</button>" +
       '<span class="todo-text"></span>' +
       '<button class="todo-cal' + (todoLinked(item) ? " is-on" : "") + '" data-act="cal" aria-label="' + tr("Put on the calendar") + '" title="' + tr("Put on the calendar") + '">' + icon("i-calplus") + "</button>" +
       '<button class="todo-del" data-act="del" aria-label="' + tr("Delete") + '">' + icon("i-trash") + "</button>";
-    row.querySelector(".todo-text").textContent = item.text;
+    var emoT = taskEmoji(item.text); row.querySelector(".todo-text").textContent = (emoT ? emoT + " " : "") + item.text;
+    var grip = row.querySelector(".todo-grip");
+    grip.addEventListener("pointerdown", function (e) {
+      e.preventDefault();
+      var startY = e.clientY, target = null;
+      try { grip.setPointerCapture(e.pointerId); } catch (x) {}
+      row.classList.add("is-lifted");
+      function mv(ev) {
+        row.style.transform = "translateY(" + (ev.clientY - startY) + "px)"; row.style.pointerEvents = "none";
+        var el = document.elementFromPoint(ev.clientX, ev.clientY), r = el && el.closest ? el.closest(".todo-row") : null;
+        [].slice.call(wrap.querySelectorAll(".drop-target")).forEach(function (n) { n.classList.remove("drop-target"); });
+        target = (r && r !== row) ? r : null; if (target) target.classList.add("drop-target");
+      }
+      function up() {
+        grip.removeEventListener("pointermove", mv); grip.removeEventListener("pointerup", up); grip.removeEventListener("pointercancel", up);
+        row.style.transform = ""; row.style.pointerEvents = ""; row.classList.remove("is-lifted");
+        if (target) {
+          var from = state.todos.indexOf(item), to = state.todos.findIndex(function (t) { return t.id === target.getAttribute("data-id"); });
+          if (from >= 0 && to >= 0 && from !== to) { state.todos.splice(to, 0, state.todos.splice(from, 1)[0]); save(); }
+        }
+        renderTodos();
+      }
+      grip.addEventListener("pointermove", mv); grip.addEventListener("pointerup", up); grip.addEventListener("pointercancel", up);
+    });
     row.querySelectorAll("button").forEach(function (b) {
       b.addEventListener("click", function () {
         var act = b.getAttribute("data-act");
@@ -1714,13 +1890,17 @@ function renderTodos() {
             state.tasks = state.tasks.filter(function (t) { return t.id !== item.calTaskId; });
             item.calTaskId = null; save(); refreshAll();
             toast(tr("Off the calendar. Still on your list."), linked ? function () { restoreAt(state.tasks, linked, linkedIdx); item.calTaskId = linked.id; save(); refreshAll(); toast(tr("Back again.")); } : undefined);
-          } else if (linkTodo(item)) { save(); refreshAll(); toast(tr("On today's calendar.")); }
+          } else if (linkTodo(item)) { save(); refreshAll(); var lt0 = baseTask(item.calTaskId); toast(lt0 && lt0.time ? tr("On today's calendar at {time}.", { time: lt0.time }) : tr("On today's calendar.")); }
         }
       });
     });
     wrap.appendChild(row);
   });
   $("todoClearDone").hidden = !state.todos.some(function (t) { return t.done; });
+  var pb = $("todoPlanDay");
+  if (!pb) { pb = document.createElement("button"); pb.id = "todoPlanDay"; pb.type = "button"; pb.className = "soft-btn plan-day-btn"; $("todoList").parentNode.insertBefore(pb, $("todoList")); pb.addEventListener("click", function () { var k = planTodosIntoDay(); save(); refreshAll(); renderTodos(); toast(k ? tr("Put {n} on today's calendar, in free spots.", { n: k }) : tr("Nothing left to place.")); }); }
+  var left = state.todos.filter(function (t) { return !t.done && !todoLinked(t); }).length;
+  pb.hidden = !left; pb.textContent = tr("Plan my day: put {n} in free spots", { n: left });
 }
 function submitTodoInput() {
   if (addTodo($("todoInput").value)) { $("todoInput").value = ""; save(); renderTodos(); }
@@ -1793,9 +1973,18 @@ function renderHabits() { if (window.PaceGoalsUI) window.PaceGoalsUI.renderHabit
 function submitHabit() {
   var name = $("habitName").value.trim();
   if (!name) { toast(tr("Give the habit a name first.")); return; }
-  state.habits.push({ id: uid(), name: name, icon: habitPick, days: {}, plan: ($("habitPlan") ? $("habitPlan").value.trim() : ""), tiny: ($("habitTiny") ? $("habitTiny").value.trim() : "") });
-  $("habitName").value = ""; if ($("habitPlan")) $("habitPlan").value = ""; if ($("habitTiny")) $("habitTiny").value = "";
-  save(); renderHabits();
+  var hab = { id: uid(), name: name, icon: habitPick, days: {}, plan: ($("habitPlan") ? $("habitPlan").value.trim() : ""), tiny: ($("habitTiny") ? $("habitTiny").value.trim() : "") };
+  var hTime = $("habitTime") ? $("habitTime").value : "";
+  if (/^\d{2}:\d{2}$/.test(hTime)) {
+    /* A habit with a time lives on the calendar every day, with its own reminder; ticking either one ticks both. */
+    var hc = L.categoryFor(name), ht = { id: uid(), title: name, date: L.todayKey(), time: hTime, durationMin: 10, priority: 0, repeat: "every day", category: hc.id, color: hc.color, status: "todo", source: "habit", habitId: hab.id, skipDates: [], doneDates: [], originalText: name };
+    if (hab.tiny) ht.minVersion = hab.tiny;
+    try { ht.remind = cleanLeads(defaultLeads()); } catch (e) {}
+    state.tasks.push(ht); hab.time = hTime; hab.taskId = ht.id;
+  }
+  state.habits.push(hab);
+  $("habitName").value = ""; if ($("habitTime")) $("habitTime").value = ""; if ($("habitPlan")) $("habitPlan").value = ""; if ($("habitTiny")) $("habitTiny").value = "";
+  save(); renderHabits(); refreshAll();
 }
 $("habitAddBtn").addEventListener("click", submitHabit);
 $("habitName").addEventListener("keydown", function (e) { if (e.key === "Enter") submitHabit(); });
@@ -1898,6 +2087,7 @@ $("ticker").addEventListener("drop", function (e) {
 function bindSettings() {
   var s = state.settings;
   $("checkinTime").value = s.checkinTime;
+  $("wakeTime").value = s.wakeTime || "07:00"; $("windTime").value = s.windTime || "22:00";
   $("nameLow").value = s.names.low; $("nameSteady").value = s.names.steady; $("nameFull").value = s.names.full;
   $("nCheckin").checked = s.notif.checkin; $("nStart").checked = s.notif.start;
   $("nSetup").value = s.notif.setup; $("nDigest").checked = s.notif.digest;
@@ -1909,6 +2099,8 @@ function bindSettings() {
 function readSettings() {
   var s = state.settings;
   s.checkinTime = $("checkinTime").value || "08:00";
+  s.wakeTime = $("wakeTime").value || "07:00"; s.windTime = $("windTime").value || "22:00";
+  try { if (calendar) calendar.setOption("businessHours", dayHours()); } catch (e) {}
   // The energy levels in your own words is a Plus row: a
   // refused rename keeps the names already in place (the
   // check-in itself, with the factory words, stays free).
@@ -1928,7 +2120,7 @@ function readSettings() {
   $("nDigestTimes").value = s.notif.digestTimes.join(", ");
   save(); renderCheckin();
 }
-["checkinTime", "nameLow", "nameSteady", "nameFull", "nCheckin", "nStart", "nSetup", "nDigest", "nDigestTimes", "nDone", "nDoneTime"].forEach(function (id) {
+["checkinTime", "wakeTime", "windTime", "nameLow", "nameSteady", "nameFull", "nCheckin", "nStart", "nSetup", "nDigest", "nDigestTimes", "nDone", "nDoneTime"].forEach(function (id) {
   $(id).addEventListener("change", readSettings);
 });
 $("clearSamples").addEventListener("click", function () {
@@ -2221,7 +2413,13 @@ function buildTour() {
   TOUR.push({ kind: "tour", panel: "progress", pose: "point", bubble: "Progress groups tasks by status. If it is locked, Pace will say so.", next: "Next" });
   TOUR.push({ kind: "tour", panel: "habits", pose: "point", bubble: "Habits helps you notice routines, one day at a time.", next: "Next" });
   TOUR.push({ kind: "tour", panel: "goals", pose: "point", bubble: "Goals turns one big goal into one small step a day on your calendar.", next: "Next" });
-  TOUR.push({ kind: "tour", panel: "settings", pose: "point", bubble: "Settings is where reminders and this guide live.", next: "Done ✓", last: true });
+  TOUR.push({ kind: "tour", panel: "settings", section: "profileCard", pose: "welcome", bubble: "This is Settings. Your name and email are at the top.", next: "Next" });
+  TOUR.push({ kind: "tour", panel: "settings", section: "accountGroup", pose: "point", bubble: "Account: your name, sign out, and download your data.", next: "Next" });
+  TOUR.push({ kind: "tour", panel: "settings", section: "setLook", pose: "point", bubble: "Look: pick a colour, a photo, or Cute mode.", next: "Next" });
+  TOUR.push({ kind: "tour", panel: "settings", section: "setCheckin", pose: "point", bubble: "Check-in: when I ask how you feel, and what you call Bad, Ok and Great.", next: "Next" });
+  TOUR.push({ kind: "tour", panel: "settings", section: "setNotif", pose: "point", bubble: "Reminders: choose how early each reminder comes. Each task can have its own.", next: "Next" });
+  TOUR.push({ kind: "tour", panel: "settings", section: "setTasks", pose: "point", bubble: "Tasks: bring a calendar in, or save yours as a file.", next: "Next" });
+  TOUR.push({ kind: "tour", panel: "settings", section: "setHelp", pose: "celebrate", bubble: "Help is here if you get stuck. Everything in Pace is free.", next: "Done ✓", last: true });
 }
 var guideStep = 0;
 var guideResumeAfterTask = null;
@@ -2265,6 +2463,7 @@ function showGuide(step) {
     else if (s.panel === "progress") target = document.querySelector('.side-item[data-panel="progress"]');
     else target = document.querySelector('#bottomTabs [data-tab="' + (s.panel === "capture" ? "capture" : s.panel === "todo" ? "todo" : s.panel === "settings" || s.panel === "habits" || s.panel === "goals" ? "more" : s.panel) + '"]');
   }
+  if (s.section && $(s.section)) { target = $(s.section); try { target.scrollIntoView({ block: "start", behavior: "auto" }); } catch (e) {} }
   if (target) target.classList.add("guide-target");
   var ex = $("guideExtra");
   if (s.kind === "name") {
@@ -2354,6 +2553,12 @@ $("guideNext").addEventListener("click", function () {
   else showGuide(guideStep + 1);
 });
 $("guideAgain").addEventListener("click", function () { TOUR = []; buildTour(); showGuide(0); });
+if ($("settingsTour")) $("settingsTour").addEventListener("click", function () {
+  if (!TOUR.length) buildTour();
+  var i = -1;
+  TOUR.forEach(function (x, k) { if (i < 0 && x.section) i = k; });
+  if (i >= 0) { $("guideSheet").hidden = false; showGuide(i); }
+});
 
 /* ---------- the upgrade moment ---------- */
 /* THE LOCKED TAP (the paid/free rules, 19 Oct: paid features release
@@ -2372,6 +2577,7 @@ $("guideAgain").addEventListener("click", function () { TOUR = []; buildTour(); 
    flow with no wanting-moment.) */
 var plusShown = {};
 function maybePlus(edge) {
+  return; /* all features free for now: no upgrade sheet */
   if (DEMO_SESSION) return;
   plusShown[edge] = 1;
   $("plusArt").innerHTML = skipSvg("welcome");
@@ -2847,7 +3053,18 @@ function freshAccountState() {
   s.updatedAt = 0;
   return s;
 }
+function renderProfileCard() {
+  var card = $("profileCard"); if (!card) return;
+  var sess = FB.session ? FB.session() : null;
+  var nm = (state.settings.profileName || "").trim();
+  var em = (ACTIVE_UID && sess && sess.email) ? sess.email : "";
+  $("pcName").textContent = nm || (em ? em.split("@")[0] : tr("Your account"));
+  $("pcEmail").textContent = em || tr("Not signed in");
+  $("pcAvatar").textContent = ((nm || em || "P").charAt(0) || "P").toUpperCase();
+  try { $("pcSkip").innerHTML = skipSvg("point"); } catch (e) {}
+}
 function renderAccount() {
+  try { renderProfileCard(); } catch (e) {}
   var grp = $("accountGroup");
   if (!grp || !FB.configured) return;
   grp.hidden = false;
@@ -3159,7 +3376,10 @@ function bindAccounts() {
         .then(function () { return FB.fsDelete(spinePath()); })
         .then(function () { return FB.fsDelete("aggSignups/" + sess.uid); })
         .then(function () { return FB.fsDelete("aggImports/" + sess.uid); })
-        .then(function () { return FB.fsDelete("subscriptions/" + sess.uid); });
+        .then(function () { return FB.fsDelete("subscriptions/" + sess.uid); })
+        // Shared goals (build 39, rules v2.5): owned shared
+        // goals die with the account, memberships are left.
+        .then(function () { return window.PaceShareUI ? window.PaceShareUI.leaveAllShared() : null; });
     }).then(function () { return FB.deleteAccount(); })
       .then(function () {
         try { localStorage.removeItem(storeKey()); localStorage.removeItem("pace-last-uid"); } catch (e) {}
@@ -3214,7 +3434,7 @@ window.PaceCtx = { get state() { return state; }, save: save, uid: uid, toast: t
       var open = !g.classList.contains("is-open");
       groups.forEach(function (o) { setOpen(o, false); });
       setOpen(g, open);
-      if (open && g.scrollIntoView) { try { g.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e) {} }
+      if (open && g.scrollIntoView) { try { g.scrollIntoView({ block: "nearest", behavior: "auto" }); } catch (e) {} }
     };
     h.addEventListener("click", toggle);
     h.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
@@ -3223,4 +3443,30 @@ window.PaceCtx = { get state() { return state; }, save: save, uid: uid, toast: t
   /* Under browser automation (test runners) keep every section open so older
      scripts can reach their buttons; set localStorage paceFold=1 to test folding. */
   if (flat) [].slice.call(document.querySelectorAll("details.task-more")).forEach(function (d) { d.open = true; });
+
+/* Settings: jump chips and Skip's settings tour. */
+document.querySelectorAll("[data-jump]").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var el = document.getElementById(b.getAttribute("data-jump"));
+    if (el) el.scrollIntoView({ block: "start", behavior: "auto" });
+  });
+});
+
+/* Bottom sheets slide down to close: pull the sheet down from its top edge. */
+document.querySelectorAll(".sheet:not(#guideSheet):not(.door-page) .sheet-card").forEach(function (card) {
+  var y0 = null, dy = 0;
+  card.addEventListener("touchstart", function (e) { if (card.scrollTop <= 0 && e.touches.length === 1) { y0 = e.touches[0].clientY; dy = 0; } else y0 = null; }, { passive: true });
+  card.addEventListener("touchmove", function (e) {
+    if (y0 === null) return; dy = e.touches[0].clientY - y0;
+    if (dy > 0) { card.style.transition = "none"; card.style.transform = "translateY(" + dy + "px)"; } else { card.style.transform = ""; }
+  }, { passive: true });
+  card.addEventListener("touchend", function () {
+    if (y0 === null) return; card.style.transition = ""; card.style.transform = "";
+    if (dy > 110) {
+      var btn = card.querySelector('[id$="Cancel"], [id$="Close"], [data-close]');
+      if (btn) btn.click(); else { var sh = card.closest(".sheet"); if (sh) sh.hidden = true; }
+    }
+    y0 = null; dy = 0;
+  });
+});
 })();

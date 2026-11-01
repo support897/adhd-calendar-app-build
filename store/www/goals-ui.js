@@ -47,6 +47,22 @@ function freeSlot(key, mins, placed) {
   }
   return null;
 }
+/* A wanted time (build 34): the business plan asks for 09:00, 13:00 and so on.
+   It gets that time only if nothing timed is already there. */
+function timeFree(key, hhmm, mins, placed) {
+  var p = String(hhmm).split(":"), s0 = (+p[0]) * 60 + (+p[1] || 0), clash = false;
+  function chk(t) {
+    if (!t || t.date !== key || !t.time || t.status === "done") return;
+    var q = String(t.time).split(":"), a = (+q[0]) * 60 + (+q[1] || 0);
+    if (s0 < a + Math.max(5, t.durationMin || 25) && s0 + mins > a) clash = true;
+  }
+  C.state.tasks.forEach(chk); (placed || []).forEach(chk);
+  return !clash;
+}
+function slotFor(st, placed) {
+  if (st.time && timeFree(st.date, st.time, st.durationMin, placed)) return st.time;
+  return freeSlot(st.date, st.durationMin, placed);
+}
 /* Quiet replan (build 33): a missed day slides on its own. Once a day,
    when the Goals screen renders, any goal with an overdue open step is
    re-planned from today with the standing replan — no button to find,
@@ -82,6 +98,7 @@ function renderHabits() {
     var main = el("div", "habit-main");
     main.appendChild(el("span", "habit-name", h.name));
     if (h.plan) main.appendChild(el("span", "habit-sub", h.plan));
+    if (h.time) main.appendChild(el("span", "habit-sub", tr("Every day at {time}, on your calendar", { time: h.time })));
     if (h.tiny) main.appendChild(el("span", "habit-sub", tr("Smallest version:") + " " + h.tiny));
     var del = el("button", "habit-del", null, { "aria-label": tr("Delete habit"), type: "button" });
     del.innerHTML = icon("i-trash");
@@ -102,6 +119,7 @@ function renderHabits() {
       b.appendChild(dot);
       b.addEventListener("click", function () {
         if (h.days[d.key]) delete h.days[d.key]; else h.days[d.key] = true;
+        if (h.taskId) { var lt = C.state.tasks.filter(function (x) { return x.id === h.taskId; })[0]; if (lt) { lt.doneDates = lt.doneDates || []; var di = lt.doneDates.indexOf(d.key); if (h.days[d.key] && di === -1) lt.doneDates.push(d.key); if (!h.days[d.key] && di !== -1) lt.doneDates.splice(di, 1); } }
         save(); renderHabits();
         if (h.days[d.key]) { var ns = G.habitStats(h.days, L.todayKey()); toast(tr(G.habitMessage(ns))); }
       });
@@ -119,9 +137,11 @@ function renderHabits() {
 
     del.addEventListener("click", function () {
       var at = C.state.habits.indexOf(h);
+      var lnk = h.taskId ? C.state.tasks.filter(function (x) { return x.id === h.taskId; })[0] : null;
       C.state.habits = C.state.habits.filter(function (x) { return x.id !== h.id; });
-      save(); renderHabits();
-      toast(tr("Habit removed."), function () { restoreAt(C.state.habits, h, at); save(); renderHabits(); toast(tr("Back again.")); });
+      if (lnk) C.state.tasks = C.state.tasks.filter(function (x) { return x !== lnk; });
+      save(); renderHabits(); C.refreshAll();
+      toast(tr("Habit removed."), function () { restoreAt(C.state.habits, h, at); if (lnk) C.state.tasks.push(lnk); save(); renderHabits(); C.refreshAll(); toast(tr("Back again.")); });
     });
     wrap.appendChild(card);
   });
@@ -134,6 +154,9 @@ function ensureHabitForm() {
   var tiny = el("input", null, null, { id: "habitTiny", type: "text", autocomplete: "off", maxlength: "70", placeholder: tr("Smallest version for hard days? e.g. Put my shoes on"), "aria-label": tr("Smallest version") });
   name.parentNode.insertBefore(plan, name.nextSibling);
   name.parentNode.insertBefore(tiny, plan.nextSibling);
+  var tl = el("label", "field habit-time-field", tr("Remind me at (optional): puts it on your calendar every day"));
+  var ti = el("input", null, null, { id: "habitTime", type: "time", "aria-label": tr("Habit time") });
+  tl.appendChild(ti); name.parentNode.insertBefore(tl, tiny.nextSibling);
   [plan, tiny].forEach(function (i) { i.addEventListener("keydown", function (e) { if (e.key === "Enter") C.submitHabit(); }); });
 }
 function renderWhy() {
@@ -180,6 +203,8 @@ function renderGoals(force) {
 
   if (!goals.length && !showForm) root.appendChild(el("div", "empty-note", tr("No goals yet. A semester goal, a certificate, a tidy home: start with one.")));
   goals.forEach(function (g) { root.appendChild(goalCard(g, today)); });
+  // Shared goals (build 39): goals other people shared with me.
+  if (window.PaceShareUI) window.PaceShareUI.renderSharedSection(root);
   var why = el("details", "why-box");
   why.appendChild(el("summary", null, tr("Why small steps")));
   [
@@ -200,6 +225,7 @@ function buildForm() {
   var f = el("form", "goal-form", null, { novalidate: "novalidate" });
   f.addEventListener("submit", function (e) { e.preventDefault(); });
   if (draft && draft.steps) return buildPreview(f);
+  if (draft && draft.ask) return buildAsk(f);
   var today = L.todayKey();
   var title = el("input", null, null, { id: "goalTitle", type: "text", maxlength: "100", autocomplete: "off", placeholder: tr("e.g. Pass my biology exam") });
   var notes = el("textarea", null, null, { id: "goalNotes", rows: "5", maxlength: "6000", placeholder: tr("Optional: paste your outline, syllabus or notes. One item per line becomes a stage of your plan.") });
@@ -232,6 +258,7 @@ function buildForm() {
   [["daily", tr("Every day")], ["weekdays", tr("Weekdays only")], ["three", tr("Three days a week (Mon, Wed, Fri)")]].forEach(function (o) { pace.appendChild(el("option", null, o[1], { value: o[0] })); });
   var mins = el("select", null, null, { id: "goalMins" });
   [10, 20, 30, 45].forEach(function (m) { var o = el("option", null, tr("About {n} minutes a day", { n: m }), { value: String(m) }); if (m === 20) o.selected = true; mins.appendChild(o); });
+  var price = el("input", null, null, { id: "goalPrice", type: "number", min: "1", inputmode: "decimal", placeholder: tr("Optional, for money goals: price of one sale") });
   var err = el("p", "gf-err", "", { id: "goalErr", role: "alert" });
   var go = el("button", "primary-btn", tr("Make my plan"), { type: "button", id: "goalPlanBtn" });
   var cancel = el("button", "soft-btn", tr("Cancel"), { type: "button" });
@@ -241,10 +268,10 @@ function buildForm() {
     if (!t && n.trim()) t = n.trim().split(/\r\n|\n|\r/)[0].replace(/^\s*(?:[-*•]|\d{1,2}[.)])\s*/, "").slice(0, 60);
     if (!t) { err.textContent = tr("Give your goal a name first."); title.focus(); return; }
     if (!end.value || end.value <= today) { err.textContent = tr("Pick a finish date after today."); end.focus(); return; }
-    var steps = G.buildPlan({ title: t, category: picked, start: today, end: end.value, pace: pace.value, mins: +mins.value, milestones: G.parseMilestones(n, picked), text: t + "\n" + n });
-    if (!steps.length) { err.textContent = tr("That date is too close for a plan. Pick a later date."); return; }
-    steps.forEach(function (st) { st.full = !freeSlot(st.date, st.durationMin); });
-    draft = { title: t, notes: n, category: picked, end: end.value, pace: pace.value, mins: +mins.value, steps: steps, fullCount: steps.filter(function (s) { return s.full; }).length };
+    var base = { price: +price.value || 0, title: t, notes: n, category: picked, end: end.value, pace: pace.value, mins: +mins.value };
+    var qs = G.questionsFor(t, t + "\n" + n, picked, n);
+    if (qs.length) { base.ask = qs; base.answers = {}; draft = base; renderGoals(true); return; }
+    if (!finishPlan(base)) { err.textContent = tr("That date is too close for a plan. Pick a later date."); return; }
     renderGoals(true);
   });
   f.appendChild(field(tr("What is your goal?"), title));
@@ -254,9 +281,69 @@ function buildForm() {
   f.appendChild(field(tr("Finish by"), end));
   f.appendChild(field(tr("How often?"), pace));
   f.appendChild(field(tr("How long each day?"), mins));
+  f.appendChild(field(tr("Price of one sale (business goals)"), price));
   f.appendChild(err);
   var row = el("div", "gf-actions"); row.appendChild(go); row.appendChild(cancel); f.appendChild(row);
   setTimeout(function () { if (draft) { title.value = draft.title || ""; notes.value = draft.notes || ""; pace.value = draft.pace || "daily"; mins.value = String(draft.mins || 20); } }, 0);
+  return f;
+}
+function finishPlan(d) {
+  var today = L.todayKey(), a = d.answers || {}, price = +a.price || d.price || 0, notes = d.notes || "";
+  var lines = notes.split(/\r\n|\n|\r/).filter(function (l) { return l.trim().length >= 3; });
+  var ms = lines.length >= 3 ? G.parseMilestones(notes, d.category) : undefined;
+  if (!ms && a.parts) {
+    var parts = String(a.parts).split(/[,;\n]/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length >= 2; });
+    if (parts.length >= 2) {
+      ms = [];
+      if (a.done) ms.push("Write down what done looks like: " + a.done);
+      ms = ms.concat(parts.map(function (x) { return x.charAt(0).toUpperCase() + x.slice(1); }));
+      ms.push("Check it and fix gaps"); ms.push("Finish and share");
+    }
+  }
+  var steps = G.buildPlan({ title: d.title, category: d.category, start: today, end: d.end, pace: d.pace, mins: d.mins, milestones: ms, text: d.title + "\n" + notes, price: price, answers: a });
+  if (!steps.length) return false;
+  steps.forEach(function (st) { st.full = st.time ? false : !freeSlot(st.date, st.durationMin); });
+  if (a.done) d.notes = "Done looks like: " + a.done + (notes ? "\n" + notes : "");
+  d.price = price; d.steps = steps; d.fullCount = steps.filter(function (s) { return s.full; }).length; d.ask = null;
+  draft = d; return true;
+}
+function buildAsk(f) {
+  f.appendChild(el("h3", "gf-h", draft.title));
+  f.appendChild(el("p", "gf-sum", tr("A few quick questions, so the steps fit you. Skip any you like.")));
+  draft.ask.forEach(function (q) {
+    var box = el("div", "gf-field", null, { "data-q": q.id });
+    box.appendChild(el("span", "gf-label", tr(q.label)));
+    if (q.options) {
+      var row = el("div", "gf-cats", null, { role: "radiogroup", "aria-label": tr(q.label) });
+      var cur = draft.answers[q.id] || "";
+      q.options.forEach(function (o) {
+        var b = el("button", "gf-cat" + (o.v === cur ? " is-on" : ""), tr(o.l), { type: "button", role: "radio", "aria-checked": String(o.v === cur), "data-v": o.v });
+        b.addEventListener("click", function () {
+          draft.answers[q.id] = o.v;
+          row.querySelectorAll(".gf-cat").forEach(function (x) { var on = x === b; x.classList.toggle("is-on", on); x.setAttribute("aria-checked", String(on)); });
+        });
+        row.appendChild(b);
+      });
+      box.appendChild(row);
+    } else {
+      var inp = el("input", null, null, { type: q.type === "number" ? "number" : "text", id: "goalQ_" + q.id, maxlength: "120", autocomplete: "off", placeholder: tr(q.placeholder || "") });
+      if (q.type === "number") { inp.setAttribute("min", "1"); inp.setAttribute("inputmode", "decimal"); }
+      inp.value = draft.answers[q.id] || "";
+      inp.addEventListener("input", function () { draft.answers[q.id] = inp.value.trim(); });
+      box.appendChild(inp);
+    }
+    f.appendChild(box);
+  });
+  var err = el("p", "gf-err", "", { role: "alert" });
+  f.appendChild(err);
+  var go = el("button", "primary-btn", tr("Make my plan"), { type: "button", id: "goalAskGo" });
+  var skip = el("button", "soft-btn", tr("Skip the questions"), { type: "button", id: "goalAskSkip" });
+  var back = el("button", "soft-btn", tr("Change something"), { type: "button" });
+  function run(skipAll) { if (skipAll) draft.answers = {}; if (!finishPlan(draft)) { err.textContent = tr("That date is too close for a plan. Pick a later date."); return; } renderGoals(true); }
+  go.addEventListener("click", function () { run(false); });
+  skip.addEventListener("click", function () { run(true); });
+  back.addEventListener("click", function () { draft = null; renderGoals(true); });
+  var row2 = el("div", "gf-actions"); row2.appendChild(go); row2.appendChild(skip); row2.appendChild(back); f.appendChild(row2);
   return f;
 }
 function buildPreview(f) {
@@ -269,6 +356,14 @@ function buildPreview(f) {
     var wk = el("div", "gf-weeks");
     s.analysis.weeks.forEach(function (w) { var r = el("p", "gf-week"); r.appendChild(el("span", "gs-date", niceDate(w.start))); r.appendChild(el("span", "gs-title", w.text)); wk.appendChild(r); });
     f.appendChild(wk);
+    if (s.analysis.typicalDay) {
+      f.appendChild(el("p", "gf-sum", tr("A normal day looks like this:")));
+      var td = el("ol", "gf-steps");
+      s.analysis.typicalDay.forEach(function (x) { var li = el("li"); li.appendChild(el("span", "gs-date", x.time)); li.appendChild(el("span", "gs-title", x.title)); td.appendChild(li); });
+      f.appendChild(td);
+      f.appendChild(el("p", "hint", tr("Each block has a reminder before it starts. You can change any time in your calendar.")));
+      if (s.analysis.guess) f.appendChild(el("p", "hint", s.analysis.guess));
+    }
     if (s.analysis.tight) f.appendChild(el("p", "hint", tr("That is a lot for the days left. The steps are bigger than usual \u2014 a later finish date would make them small again.")));
   }
   if (draft.fullCount) f.appendChild(el("p", "hint", tr("{n} of these days already look full, so those steps will sit in the day's list instead of at a set time.", { n: draft.fullCount })));
@@ -290,9 +385,9 @@ function commitDraft() {
   ensureGoals().push(goal);
   var placed = [];
   d.steps.forEach(function (st) {
-    var slot = freeSlot(st.date, st.durationMin, placed);
+    var slot = slotFor(st, placed);
     var task = { id: uid(), title: st.title, date: st.date, time: slot, durationMin: st.durationMin, priority: 0, repeat: null, category: "other", color: cat.color, icon: cat.emoji,
-      essential: false, status: "todo", steps: [], minVersion: st.minVersion, fullVersion: "", source: "goal", goalId: goal.id, originalText: goal.title, skipDates: [], doneDates: [] };
+      essential: false, status: "todo", steps: [], minVersion: st.minVersion, fullVersion: "", source: "goal", goalId: goal.id, remind: [10], originalText: goal.title, skipDates: [], doneDates: [] };
     C.state.tasks.push(task);
     if (slot) placed.push(task);
   });
@@ -335,6 +430,12 @@ function goalCard(g, today) {
   }
   var seeBtn = el("button", "soft-btn", tr("See steps"), { type: "button", "aria-expanded": "false" });
   var del = el("button", "soft-btn danger", tr("Delete goal"), { type: "button" });
+  // Shared goals (build 39): the share entry lives on the goal card.
+  if (window.PaceShareUI) {
+    var shBtn = el("button", "soft-btn", tr(g.sharedGoalId ? "Shared goal" : "Share this goal"), { type: "button" });
+    shBtn.addEventListener("click", function () { window.PaceShareUI.openShare(g); });
+    acts.appendChild(shBtn);
+  }
   acts.appendChild(seeBtn); acts.appendChild(del);
   card.appendChild(acts);
   var stepsBox = el("div", "goal-steps"); stepsBox.hidden = true; card.appendChild(stepsBox);

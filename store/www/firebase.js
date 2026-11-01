@@ -213,8 +213,10 @@
       return fsReq("PATCH", url, { fields: fieldsOf(obj) }).then(docToObj);
     },
     fsDelete: function (path) { return fsReq("DELETE", path).then(function () { return true; }); },
-    /* List a collection's documents (used ONLY for owner-readable
-       counter/feed collections — never for user state). */
+    /* List a collection's documents (owner-readable counter/feed
+       collections, and — build 39 — a shared goal's steps
+       subcollection, which the rules open to that goal's members
+       only; never for a user's private state). */
     fsList: function (collectionPath) {
       return token().then(function (tok) {
         return fetchT(fsBase() + collectionPath + "?pageSize=1000", { headers: { "Authorization": "Bearer " + tok } })
