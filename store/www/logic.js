@@ -188,6 +188,37 @@ function sortDay(tasks) {
   });
 }
 
+/* Build 37: the day adapts on its own. A task with no taught smaller version still gets a
+   light (Bad day) and a medium (Ok day) version, found from the words in its title. */
+var AUTO_VERBS = [
+  [/\b(write|draft|compose|essay|article|report|blog|post|thesis|proposal)\b/i, "3 lines only", "half of it", 10],
+  [/\b(read|study|revise|review|learn|course|chapter)\b/i, "1 page only", "10 minutes", 10],
+  [/\b(clean|tidy|laundry|dishes|vacuum|declutter|organi[sz]e|sort|pack)\b/i, "5 min tidy", "one area", 5],
+  [/\b(email|emails|reply|respond|message|inbox|text)\b/i, "one quick reply", "top 3 only", 5],
+  [/\b(call|phone|ring)\b/i, "short call or text", "keep it brief", 5],
+  [/\b(gym|workout|exercise|run|jog|walk|yoga|train|training|swim|stretch)\b/i, "5 min easy move", "short session", 10],
+  [/\b(cook|meal|dinner|lunch|breakfast|prep)\b/i, "something simple", "quick version", 15],
+  [/\b(pay|bill|bills|invoice|tax|taxes|budget|admin|paperwork|form)\b/i, "first line only", "the main part", 10],
+  [/\b(plan|planning|schedule|roadmap|outline|brainstorm)\b/i, "list 3 things", "first part only", 10],
+  [/\b(code|build|design|develop|fix|debug|ship)\b/i, "one small piece", "half the work", 10],
+  [/\b(shop|shopping|buy|errand|errands|groceries)\b/i, "just the must-haves", "the short list", 15]
+];
+function roundFive(n) { return Math.max(5, Math.round(n / 5) * 5); }
+function autoVersion(task, level) {
+  var dur = task.durationMin || 15, title = task.title || "", row = null, i;
+  for (i = 0; i < AUTO_VERBS.length; i++) if (AUTO_VERBS[i][0].test(title)) { row = AUTO_VERBS[i]; break; }
+  if (level === "low") {
+    if (dur <= 10) return null;
+    var lm = row ? row[3] : 5;
+    return { title: title + " (" + (row ? row[1] : "5 minutes only") + ")", durationMin: Math.min(dur, lm), kind: "light" };
+  }
+  if (level === "steady") {
+    if (dur < 30) return null;
+    return { title: title + " (" + (row ? row[2] : "short version") + ")", durationMin: roundFive(dur / 2), kind: "medium" };
+  }
+  return null;
+}
+
 /* The feeling adaptation. Returns the day as it should be SHOWN at a level.
    Nothing is deleted: parked tasks are simply resting out of sight. */
 function adaptDay(tasks, level, tomorrowTasks) {
@@ -200,11 +231,11 @@ function adaptDay(tasks, level, tomorrowTasks) {
        minimum by definition: it stays, shrunk, instead of vanishing. */
     var taught = sorted.filter(function (x) { return !x.essential && x.minVersion; });
     var rest = sorted.filter(function (x) { return !x.essential && !x.minVersion; });
-    visible = ess.slice(0, 4).concat(taught).slice(0, 6);
+    visible = ess.slice(0, 4).concat(taught.slice(0, 3)).slice(0, 6);
     if (!taught.length && visible.length < 4 && rest.length) {
-      var tiny = rest.slice().sort(function (a, b) { return a.durationMin - b.durationMin; })[0];
-      visible.push(tiny);
-      rest = rest.filter(function (x) { return x !== tiny; });
+      var tinies = rest.slice().sort(function (a, b) { return a.durationMin - b.durationMin; }).slice(0, 4 - visible.length);
+      tinies.forEach(function (tn) { visible.push(tn); });
+      rest = rest.filter(function (x) { return tinies.indexOf(x) === -1; });
     }
     parked = sorted.filter(function (x) { return visible.indexOf(x) === -1; });
   } else if (level === "full") {
@@ -221,7 +252,11 @@ function adaptDay(tasks, level, tomorrowTasks) {
     var copy = {}; for (var k in x) copy[k] = x[k];
     copy.displayTitle = x.title;
     copy.shrunk = false;
-    if (level === "low" && x.minVersion) { copy.displayTitle = x.minVersion; copy.shrunk = true; }
+    if (level === "low" && x.minVersion) { copy.displayTitle = /^Just 5 minutes/.test(x.minVersion) ? "Just 5 minutes: " + x.title : x.minVersion; copy.shrunk = true; }
+    if (!copy.shrunk && !x.minVersion && (level === "low" || level === "steady")) {
+      var av = autoVersion(x, level);
+      if (av) { copy.displayTitle = av.title; copy.durationMin = av.durationMin; copy.autoVersion = av.kind; copy.shrunk = av.kind === "light"; }
+    }
     if (level === "full" && x.fullVersion) { copy.displayTitle = x.fullVersion; }
     return copy;
   });

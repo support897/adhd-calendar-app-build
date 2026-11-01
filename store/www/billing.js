@@ -195,7 +195,8 @@
   }
 
   // The synchronous gate answer: entitled right now.
-  function plusActive() { return !!(_state.plus && Date.now() < _state.until); }
+  /* All features are free for now (30 Oct 2026, owner ruling): nothing is locked. */
+  function plusActive() { return true; }
 
   // The price words the Plans surface speaks today. When the
   // layer goes live these read from the store's own localised
